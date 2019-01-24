@@ -1,3 +1,10 @@
+# 添加
+.idea/
+gradle.properties
+gradle/
+gradlew
+gradlew.bat
+
 # studio自带
 *.iml
 .gradle
