@@ -1,13 +1,19 @@
 package com.example.aarlib;
 
 import android.annotation.TargetApi;
+import android.app.Activity;
 import android.content.Context;
+import android.content.Intent;
 import android.content.SharedPreferences;
 import android.net.Uri;
 import android.os.Build;
+import android.os.StatFs;
+import android.os.storage.StorageManager;
+import android.os.storage.StorageVolume;
 import android.preference.PreferenceManager;
 import android.provider.DocumentsContract;
 import android.support.v4.provider.DocumentFile;
+import android.text.TextUtils;
 import android.util.Log;
 
 import java.io.File;
@@ -24,17 +30,24 @@ public class DocumentsUtils {
 
     private static final String TAG = DocumentsUtils.class.getSimpleName();
 
+    public static final long UNAVAILABLE = -1L;
+
     public static final int OPEN_DOCUMENT_TREE_CODE = 8000;
 
     private static List<String> sExtSdCardPaths = new ArrayList<>();
 
     private static String rootPath = "";
 
+    private static File mCameraDir = null;
+
+    private static Context context;
+
     private DocumentsUtils() {
 
     }
 
-    public static void init(Context context) {
+    public static void init(Context ct) {
+        context = ct;
         getRootPath(context);
     }
 
@@ -43,6 +56,26 @@ public class DocumentsUtils {
             Log.e(TAG, "getRootPath: is null");
         }
         return rootPath;
+    }
+
+    public static long getSDAvailableSpace() {
+        try {
+            StatFs stat = new StatFs(rootPath);
+            return stat.getAvailableBlocksLong() * stat.getBlockSizeLong();
+        } catch (IllegalArgumentException e) {
+            Log.e(TAG, "Failed to access external storage", e);
+        }
+        return DocumentsUtils.UNAVAILABLE;
+    }
+
+    public static boolean isMounted(){
+        return TextUtils.isEmpty(rootPath);
+    }
+
+    public static boolean isAvailable() {
+        return isMounted()
+                && mCameraDir.isDirectory()
+                && canWrite(context, mCameraDir);
     }
 
     public static String getRootPath(Context context) {
@@ -54,6 +87,7 @@ public class DocumentsUtils {
                 if (!canonicalPath.contains("emulated")) {
                     int i2 = canonicalPath.indexOf("/Android/data/");
                     rootPath = canonicalPath.substring(0, i2);
+                    mCameraDir = new File(rootPath + "/DCIM/Camera");
                     Log.i(TAG, "getRootPath: rootPath=" + rootPath);
                     break;
                 }
@@ -312,6 +346,13 @@ public class DocumentsUtils {
         return false;
     }
 
+    public static boolean checkWritableRootPath() {
+        return checkWritableRootPath(context, rootPath);
+    }
+
+    /**
+     * @return true if not writable
+     * */
     public static boolean checkWritableRootPath(Context context, String rootPath) {
         File root = new File(rootPath);
         if (!root.canWrite()) {
