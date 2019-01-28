@@ -27,6 +27,9 @@ import java.io.OutputStream;
 import java.util.ArrayList;
 import java.util.List;
 
+/**
+ * 通过 存储访问框架(SAF) 访问外置SD卡
+ */
 public class DocumentsUtils {
 
     private static final String TAG = DocumentsUtils.class.getSimpleName();
@@ -94,7 +97,7 @@ public class DocumentsUtils {
 
     public static boolean isSdCameraDirAvailable() {
         boolean isCameraDirAvailable = false;
-        if (isMounted() && (mCameraDir.isDirectory() || mkdirs(mContext, mCameraDir))) {
+        if (isMounted() && (mCameraDir.isDirectory() || mkdirs(mCameraDir))) {
             isCameraDirAvailable = canWriteByDoc(mCameraDir);
         }
         return isCameraDirAvailable;
@@ -186,12 +189,12 @@ public class DocumentsUtils {
      * @return A list of external SD card paths.
      */
     @TargetApi(Build.VERSION_CODES.KITKAT)
-    private static String[] getExtSdCardPaths(Context context) {
+    private static String[] getExtSdCardPaths() {
         if (sExtSdCardPaths.size() > 0) {
             return sExtSdCardPaths.toArray(new String[0]);
         }
-        for (File file : context.getExternalFilesDirs("external")) {
-            if (file != null && !file.equals(context.getExternalFilesDir("external"))) {
+        for (File file : mContext.getExternalFilesDirs("external")) {
+            if (file != null && !file.equals(mContext.getExternalFilesDir("external"))) {
                 int index = file.getAbsolutePath().lastIndexOf("/Android/data");
                 if (index < 0) {
                     Log.w(TAG, "Unexpected external file dir: " + file.getAbsolutePath());
@@ -219,8 +222,8 @@ public class DocumentsUtils {
      * null is returned.
      */
     @TargetApi(Build.VERSION_CODES.KITKAT)
-    private static String getExtSdCardFolder(final File file, Context context) {
-        String[] extSdPaths = getExtSdCardPaths(context);
+    private static String getExtSdCardFolder(final File file) {
+        String[] extSdPaths = getExtSdCardPaths();
         try {
             for (int i = 0; i < extSdPaths.length; i++) {
                 if (file.getCanonicalPath().startsWith(extSdPaths[i])) {
@@ -233,12 +236,8 @@ public class DocumentsUtils {
         return null;
     }
 
-    public static boolean isOnSdCard(final File file) {
-        return isOnExtSdCard(file, mContext);
-    }
-
     public static boolean isOnSdCard(final String file) {
-        return isOnExtSdCard(new File(file), mContext);
+        return isOnSdCard(new File(file));
     }
 
     /**
@@ -248,24 +247,19 @@ public class DocumentsUtils {
      * @return true if on external sd card.
      */
     @TargetApi(Build.VERSION_CODES.KITKAT)
-    public static boolean isOnExtSdCard(final File file, Context c) {
-        return getExtSdCardFolder(file, c) != null;
+    public static boolean isOnSdCard(final File file) {
+        return getExtSdCardFolder(file) != null;
     }
 
     public static DocumentFile getDocumentFile(String file, final boolean isDirectory, String mimeType) {
-        return getDocumentFile(new File(file), isDirectory, mContext, mimeType);
+        return getDocumentFile(new File(file), isDirectory, mimeType);
     }
 
     public static DocumentFile getDocumentFile(final File file, final boolean isDirectory, String mimeType) {
-        return getDocumentFile(file, isDirectory, mContext, mimeType);
-    }
-
-    public static DocumentFile getDocumentFile(final File file, final boolean isDirectory,
-                                               Context context, String mimeType) {
         if (Build.VERSION.SDK_INT <= Build.VERSION_CODES.KITKAT) {
             return DocumentFile.fromFile(file);
         }
-        String baseFolder = getExtSdCardFolder(file, context);
+        String baseFolder = getExtSdCardFolder(file);
         boolean originalDirectory = false;
         if (baseFolder == null) {
             return null;
@@ -284,7 +278,7 @@ public class DocumentsUtils {
             originalDirectory = true;
             //continue
         }
-        String as = PreferenceManager.getDefaultSharedPreferences(context).getString(baseFolder,
+        String as = PreferenceManager.getDefaultSharedPreferences(mContext).getString(baseFolder,
                 null);
         Uri treeUri = null;
         if (as != null) treeUri = Uri.parse(as);
@@ -292,7 +286,7 @@ public class DocumentsUtils {
             return null;
         }
         // start with root of SD card and then parse through document tree.
-        DocumentFile document = DocumentFile.fromTreeUri(context, treeUri);
+        DocumentFile document = DocumentFile.fromTreeUri(mContext, treeUri);
         if (originalDirectory) return document;
         String[] parts = relativePath.split("/");
         for (int i = 0; i < parts.length; i++) {
@@ -322,7 +316,7 @@ public class DocumentsUtils {
         if (Build.VERSION.SDK_INT <= Build.VERSION_CODES.KITKAT) {
             return DocumentFile.fromFile(file);
         }
-        String baseFolder = getExtSdCardFolder(file, mContext);
+        String baseFolder = getExtSdCardFolder(file);
         boolean originalDirectory = false;
         if (baseFolder == null) {
             return null;
@@ -366,11 +360,11 @@ public class DocumentsUtils {
         return document;
     }
 
-    public static boolean mkdirs(Context context, File dir) {
+    public static boolean mkdirs(File dir) {
         boolean res = dir.mkdirs();
         if (!res) {
-            if (DocumentsUtils.isOnExtSdCard(dir, context)) {
-                DocumentFile documentFile = DocumentsUtils.getDocumentFile(dir, true);
+            if (isOnSdCard(dir)) {
+                DocumentFile documentFile = getDocumentFile(dir, true);
                 res = documentFile != null && documentFile.canWrite();
             }
         }
@@ -379,8 +373,8 @@ public class DocumentsUtils {
 
     public static boolean delete(File file) {
         boolean ret = file.delete();
-        if (!ret && DocumentsUtils.isOnSdCard(file)) {
-            DocumentFile f = DocumentsUtils.getDocumentFile(file, false);
+        if (!ret && isOnSdCard(file)) {
+            DocumentFile f = getDocumentFile(file, false);
             if (f != null) {
                 ret = f.delete();
             }
@@ -389,7 +383,7 @@ public class DocumentsUtils {
     }
 
     /**
-     * 判断 不用DocumentFile时,SDCard是否可写
+     * 判断 不借助DocumentFile的条件下,SDCard是否可写
      */
     public static boolean canWriteNotByDoc(File file) {
         boolean res = file.exists() && file.canWrite();
@@ -419,11 +413,11 @@ public class DocumentsUtils {
         return res;
     }
 
-    public static boolean renameTo(Context context, File src, File dest) {
+    public static boolean renameTo(File src, File dest) {
         boolean res = src.renameTo(dest);
-        if (!res && isOnExtSdCard(dest, context)) {
+        if (!res && isOnSdCard(dest)) {
             DocumentFile srcDoc;
-            if (isOnExtSdCard(src, context)) {
+            if (isOnSdCard(src)) {
                 srcDoc = getDocumentFile(src, false);
             } else {
                 srcDoc = DocumentFile.fromFile(src);
@@ -434,7 +428,7 @@ public class DocumentsUtils {
                     if (src.getParent().equals(dest.getParent())) {
                         res = srcDoc.renameTo(dest.getName());
                     } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
-                        res = DocumentsContract.moveDocument(context.getContentResolver(),
+                        res = DocumentsContract.moveDocument(mContext.getContentResolver(),
                                 srcDoc.getUri(),
                                 srcDoc.getParentFile().getUri(),
                                 destDoc.getUri()) != null;
@@ -447,13 +441,13 @@ public class DocumentsUtils {
         return res;
     }
 
-    public static InputStream getInputStream(Context context, File destFile) {
+    public static InputStream getInputStream(File destFile) {
         InputStream in = null;
         try {
-            if (!canWriteNotByDoc(destFile) && isOnExtSdCard(destFile, context)) {
-                DocumentFile file = DocumentsUtils.getDocumentFile(destFile, false);
+            if (!canWriteNotByDoc(destFile) && isOnSdCard(destFile)) {
+                DocumentFile file = getDocumentFile(destFile, false);
                 if (file != null && file.canWrite()) {
-                    in = context.getContentResolver().openInputStream(file.getUri());
+                    in = mContext.getContentResolver().openInputStream(file.getUri());
                 }
             } else {
                 in = new FileInputStream(destFile);
@@ -486,13 +480,13 @@ public class DocumentsUtils {
     }
 
     public static boolean saveTreeUri(Context context, String rootPath, Uri uri) {
-        DocumentFile file = DocumentFile.fromTreeUri(context, uri);
+        DocumentFile file = DocumentFile.fromTreeUri(mContext, uri);
         if (file != null && file.canWrite()) {
-            SharedPreferences perf = PreferenceManager.getDefaultSharedPreferences(context);
-            perf.edit().putString(rootPath, uri.toString()).apply();
+            SharedPreferences perf = PreferenceManager.getDefaultSharedPreferences(mContext);
+            perf.edit().putString(mRootPath, uri.toString()).apply();
             try {
                 // 为了下次不用反复请求权限的问题,保存授权在系统了，即使reboot了也依然存在，除非clear APP data.
-                context.getContentResolver().takePersistableUriPermission(uri,
+                mContext.getContentResolver().takePersistableUriPermission(uri,
                         Intent.FLAG_GRANT_WRITE_URI_PERMISSION | Intent.FLAG_GRANT_READ_URI_PERMISSION);
             } catch (Exception e) {
                 Log.e(TAG, "onActivityResult: 不可保存的授权 " + uri);
@@ -500,32 +494,28 @@ public class DocumentsUtils {
             }
             return true;
         } else {
-            Log.e(TAG, "no write permission: " + rootPath);
+            Log.e(TAG, "no write permission: " + mRootPath);
         }
         return false;
-    }
-
-    public static boolean checkWritableRootPath() {
-        return checkWritableRootPath(mContext, mRootPath);
     }
 
     /**
      * @return true if not writable
      */
-    public static boolean checkWritableRootPath(Context context, String rootPath) {
-        File root = new File(rootPath);
-        if (!TextUtils.isEmpty(rootPath) && !root.canWrite()) {
+    public static boolean checkWritableRootPath() {
+        File root = new File(mRootPath);
+        if (!TextUtils.isEmpty(mRootPath) && !root.canWrite()) {
             Log.d(TAG, "checkWritableRootPath: ");
-            if (DocumentsUtils.isOnExtSdCard(root, context)) {
-                DocumentFile documentFile = DocumentsUtils.getDocumentFile(root, true);
+            if (isOnSdCard(root)) {
+                DocumentFile documentFile = getDocumentFile(root, true);
                 return documentFile == null || !documentFile.canWrite();
             } else {
-                SharedPreferences perf = PreferenceManager.getDefaultSharedPreferences(context);
-                String documentUri = perf.getString(rootPath, "");
+                SharedPreferences perf = PreferenceManager.getDefaultSharedPreferences(mContext);
+                String documentUri = perf.getString(mRootPath, "");
                 if (documentUri == null || documentUri.isEmpty()) {
                     return true;
                 } else {
-                    DocumentFile file = DocumentFile.fromTreeUri(context, Uri.parse(documentUri));
+                    DocumentFile file = DocumentFile.fromTreeUri(mContext, Uri.parse(documentUri));
                     return !(file != null && file.canWrite());
                 }
             }
