@@ -95,7 +95,7 @@ public class DocumentsUtils {
     public static boolean isSdCameraDirAvailable() {
         boolean isCameraDirAvailable = false;
         if (isMounted() && (mCameraDir.isDirectory() || mkdirs(mContext, mCameraDir))) {
-            isCameraDirAvailable = canWrite(mCameraDir);
+            isCameraDirAvailable = canWriteByDoc(mCameraDir);
         }
         return isCameraDirAvailable;
     }
@@ -377,9 +377,9 @@ public class DocumentsUtils {
         return res;
     }
 
-    public static boolean delete(Context context, File file) {
+    public static boolean delete(File file) {
         boolean ret = file.delete();
-        if (!ret && DocumentsUtils.isOnExtSdCard(file, context)) {
+        if (!ret && DocumentsUtils.isOnSdCard(file)) {
             DocumentFile f = DocumentsUtils.getDocumentFile(file, false);
             if (f != null) {
                 ret = f.delete();
@@ -389,9 +389,9 @@ public class DocumentsUtils {
     }
 
     /**
-     * 兼容DocumentFile
+     * 判断 不用DocumentFile时,SDCard是否可写
      */
-    public static boolean canWrite(File file) {
+    public static boolean canWriteNotByDoc(File file) {
         boolean res = file.exists() && file.canWrite();
         if (!res && !file.exists()) {
             try {
@@ -404,6 +404,14 @@ public class DocumentsUtils {
                 e.printStackTrace();
             }
         }
+        return res;
+    }
+
+    /**
+     * 兼容DocumentFile
+     */
+    public static boolean canWriteByDoc(File file) {
+        boolean res = canWriteNotByDoc(file);
         if (!res && isOnSdCard(file)) {
             DocumentFile documentFile = getDocumentFile(file, true);
             res = documentFile != null && documentFile.canWrite();
@@ -442,7 +450,7 @@ public class DocumentsUtils {
     public static InputStream getInputStream(Context context, File destFile) {
         InputStream in = null;
         try {
-            if (isOnExtSdCard(destFile, context)) {
+            if (!canWriteNotByDoc(destFile) && isOnExtSdCard(destFile, context)) {
                 DocumentFile file = DocumentsUtils.getDocumentFile(destFile, false);
                 if (file != null && file.canWrite()) {
                     in = context.getContentResolver().openInputStream(file.getUri());
@@ -463,7 +471,7 @@ public class DocumentsUtils {
     public static OutputStream getOutputStream(File destFile) {
         OutputStream out = null;
         try {
-            if (isOnSdCard(destFile)) {
+            if (!canWriteNotByDoc(destFile) && isOnSdCard(destFile)) {
                 DocumentFile file = getDocumentFile(destFile, false);
                 if (file != null && file.canWrite()) {
                     out = mContext.getContentResolver().openOutputStream(file.getUri());
