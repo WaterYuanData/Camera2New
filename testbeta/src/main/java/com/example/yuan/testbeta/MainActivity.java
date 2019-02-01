@@ -1,5 +1,7 @@
 package com.example.yuan.testbeta;
 
+import android.content.pm.PackageInfo;
+import android.content.pm.PackageManager;
 import android.support.v7.app.AppCompatActivity;
 import android.os.Bundle;
 import android.view.View;
@@ -17,8 +19,19 @@ public class MainActivity extends AppCompatActivity {
         findViewById(R.id.button).setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
-                Toast.makeText(getApplicationContext(),"888",Toast.LENGTH_SHORT).show();
+
+                test();
             }
         });
+    }
+
+    private void test() {
+        try {
+            PackageManager packageManager = getApplicationContext().getPackageManager();
+            PackageInfo packageInfo = packageManager.getPackageInfo("com.example.yuan.testbeta", 0);
+            Toast.makeText(getApplicationContext(), "版本名来自 gradle.properties 为：" + packageInfo.versionName, Toast.LENGTH_SHORT).show();
+        } catch (PackageManager.NameNotFoundException e) {
+            e.printStackTrace();
+        }
     }
 }

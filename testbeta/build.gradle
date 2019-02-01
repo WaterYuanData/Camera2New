@@ -6,8 +6,8 @@ android {
         applicationId "com.example.yuan.testbeta"
         minSdkVersion 26
         targetSdkVersion 28
-        versionCode 1
-        versionName "1.0"
+        versionCode Integer.parseInt(project.properties.myVersion)
+        versionName String.valueOf(project.properties.myName)
         testInstrumentationRunner "android.support.test.runner.AndroidJUnitRunner"
 
         buildConfigField("boolean", "LOG_D", "false")
