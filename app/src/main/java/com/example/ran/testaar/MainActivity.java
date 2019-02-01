@@ -12,7 +12,7 @@ public class MainActivity extends AppCompatActivity {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
 
-        boolean log_debug = BuildConfig.LOG_DEBUG;
-        Log.d(TAG, "onCreate: log_debug="+log_debug);
+//        boolean log_debug = BuildConfig.LOG_E;
+//        Log.d(TAG, "onCreate: log_debug="+log_debug);
     }
 }

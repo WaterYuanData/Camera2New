@@ -1,6 +1,20 @@
 apply plugin: 'com.android.application'
 
 android {
+    signingConfigs {
+        debug {
+            keyAlias 'key0'
+            keyPassword '123456'
+            storeFile file('D:/MyCode/TestAAR/app/myKey.jks')
+            storePassword '123456'
+        }
+        my {
+            keyAlias 'key0'
+            keyPassword '123456'
+            storeFile file('D:/MyCode/TestAAR/app/myKey.jks')
+            storePassword '123456'
+        }
+    }
     compileSdkVersion 28
     defaultConfig {
         applicationId "com.example.ran.testaar"
@@ -9,25 +23,28 @@ android {
         versionCode 1
         versionName "1.0"
         testInstrumentationRunner "android.support.test.runner.AndroidJUnitRunner"
+
+        buildConfigField("boolean", "LOG_D", "false")
+        buildConfigField "String", "APP_NAME", '"你好"'
     }
     buildTypes {
-        release {
+        debug {
             minifyEnabled false
-            proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
+            buildConfigField "String", "APP_NAME", '"debug"'
+            buildConfigField("boolean", "LOG_D", "true")
+            signingConfig signingConfigs.my
         }
-        beta33 {
+        my {
             minifyEnabled false
-            buildConfigField("boolean", "LOG_DEBUG", "false")
-        }
-        debug22 {
-            minifyEnabled false
-            buildConfigField("boolean", "LOG_DEBUG", "true")
+            buildConfigField "String", "APP_NAME", '"beta"'
+            debuggable true
+            signingConfig signingConfigs.my
         }
     }
 }
 
 dependencies {
-    implementation fileTree(dir: 'libs', include: ['*.jar'])
+    implementation fileTree(include: ['*.jar'], dir: 'libs')
     implementation 'com.android.support:appcompat-v7:28.0.0'
     implementation 'com.android.support.constraint:constraint-layout:1.1.3'
     testImplementation 'junit:junit:4.12'

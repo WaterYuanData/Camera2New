@@ -1,4 +1,8 @@
 #! bin/bash
 echo '555'
 
-./gradlew assembleBeta33
+./gradlew clean
+#./gradlew assembleRelease
+#./gradlew assembleDebug
+#./gradlew assembleMy
+./gradlew installMy
