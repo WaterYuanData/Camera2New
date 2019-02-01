@@ -108,7 +108,7 @@ public class DocumentsUtils {
      */
     public static long getSDAvailableSpace() {
         if (TextUtils.isEmpty(mRootPath)) {
-            return DocumentsUtils.UNAVAILABLE;
+            return UNAVAILABLE;
         }
         try {
             StatFs stat = new StatFs(mRootPath);
@@ -116,7 +116,7 @@ public class DocumentsUtils {
         } catch (IllegalArgumentException e) {
             Log.e(TAG, "Failed to access external storage", e);
         }
-        return DocumentsUtils.UNAVAILABLE;
+        return UNAVAILABLE;
     }
 
     /**
@@ -146,7 +146,7 @@ public class DocumentsUtils {
         }
         boolean isCameraDirAvailable = false;
         if (isMounted() && (mCameraDir.isDirectory() || mkdirs(mCameraDir))) {
-            isCameraDirAvailable = canWriteByDoc(mCameraDir);
+            isCameraDirAvailable = canWriteByDoc(mCameraDir, true);
         }
         return isCameraDirAvailable;
     }
@@ -237,9 +237,23 @@ public class DocumentsUtils {
     }
 
     /**
-     * 获取文件对应的DocumentFile,如果文件不存在会自动创建
+     * 获取file对应的DocumentFile,如果file不存在会根据isDirectory自动创建文件或者文件夹
      *
-     * @param mimeType 非路径文件的文件类型
+     * @param file        The file.
+     * @param isDirectory 指明要得到的DocumentFile是文件还是文件夹
+     * @return The DocumentFile
+     */
+    public static DocumentFile getDocumentFile(File file, boolean isDirectory) {
+        return getDocumentFile(file, isDirectory, "");
+    }
+
+    /**
+     * 获取file对应的DocumentFile,如果file不存在会根据isDirectory自动创建文件或者文件夹
+     *
+     * @param file        The file.
+     * @param isDirectory 指明要得到的DocumentFile是文件还是文件夹
+     * @param mimeType    文件的文件类型
+     * @return The DocumentFile
      */
     public static DocumentFile getDocumentFile(File file, boolean isDirectory, String mimeType) {
         String baseFolder = getExtSdCardFolder(file);
@@ -293,21 +307,7 @@ public class DocumentsUtils {
     }
 
     /**
-     * 获取文件对应的DocumentFile,如果文件不存在会自动创建
-     *
-     * @param file The file.
-     * @return The DocumentFile
-     */
-    public static DocumentFile getDocumentFile(File file) {
-        return getDocumentFile(file, false, "");
-    }
-
-    public static DocumentFile getDocumentFile(File file, boolean isDirectory) {
-        return getDocumentFile(file, isDirectory, "");
-    }
-
-    /**
-     * 兼容DocumentFile的创建文件
+     * 兼容DocumentFile的创建文件夹
      */
     public static boolean mkdirs(File dir) {
         boolean res = dir.mkdirs();
@@ -321,12 +321,12 @@ public class DocumentsUtils {
     }
 
     /**
-     * 兼容DocumentFile的删除文件
+     * 兼容DocumentFile的删除文件/文件夹
      */
-    public static boolean delete(File file) {
+    public static boolean delete(File file, boolean isDirectory) {
         boolean ret = file.delete();
         if (!ret && isOnSdCard(file)) {
-            DocumentFile f = getDocumentFile(file);
+            DocumentFile f = getDocumentFile(file, isDirectory);
             if (f != null) {
                 ret = f.delete();
             }
@@ -354,33 +354,34 @@ public class DocumentsUtils {
     }
 
     /**
-     * 借助DocumentFile的条件下,判断文件是否可写
+     * 借助DocumentFile的条件下,判断文件/文件夹是否可写
      */
-    public static boolean canWriteByDoc(File file) {
+    public static boolean canWriteByDoc(File file, boolean isDirectory) {
         boolean res = canWriteNotByDoc(file);
         if (!res && isOnSdCard(file)) {
-            DocumentFile documentFile = getDocumentFile(file, true);
+            DocumentFile documentFile = getDocumentFile(file, isDirectory);
             res = documentFile != null && documentFile.canWrite();
         }
         return res;
     }
 
     /**
-     * 兼容DocumentFile的重命名
+     * 兼容DocumentFile的重命名文件/文件夹
      *
-     * @param src  重命名前的文件
-     * @param dest 重命名后的文件
+     * @param src         重命名前的源文件
+     * @param dest        重命名后的目标文件
+     * @param isDirectory 指明文件/文件夹
      */
-    public static boolean renameTo(File src, File dest) {
+    public static boolean renameTo(File src, File dest, boolean isDirectory) {
         boolean res = src.renameTo(dest);
         if (!res && isOnSdCard(dest)) {
             DocumentFile srcDoc;
             if (isOnSdCard(src)) {
-                srcDoc = getDocumentFile(src);
+                srcDoc = getDocumentFile(src, isDirectory);
             } else {
                 srcDoc = DocumentFile.fromFile(src);
             }
-            DocumentFile destDoc = getDocumentFile(dest.getParentFile(), true);
+            DocumentFile destDoc = getDocumentFile(dest.getParentFile(), isDirectory);
             if (srcDoc != null && destDoc != null) {
                 try {
                     if (src.getParent().equals(dest.getParent())) {
@@ -407,7 +408,7 @@ public class DocumentsUtils {
         InputStream in = null;
         try {
             if (!canWriteNotByDoc(destFile) && isOnSdCard(destFile)) {
-                DocumentFile file = getDocumentFile(destFile);
+                DocumentFile file = getDocumentFile(destFile, false);
                 if (file != null && file.canWrite()) {
                     in = mContext.getContentResolver().openInputStream(file.getUri());
                 }
@@ -438,7 +439,7 @@ public class DocumentsUtils {
         Log.i(TAG, "getFileDescriptor: " + destFile.toString());
         try {
             if (!canWriteNotByDoc(destFile) && isOnSdCard(destFile)) {
-                DocumentFile file = getDocumentFile(destFile);
+                DocumentFile file = getDocumentFile(destFile, false);
                 if (file != null && file.canWrite()) {
                     fileDescriptor = mContext.getContentResolver().openFileDescriptor(file.getUri(), "rw").getFileDescriptor();
                 }
@@ -469,7 +470,7 @@ public class DocumentsUtils {
         Log.i(TAG, "getOutputStream: " + destFile.toString());
         try {
             if (!canWriteNotByDoc(destFile) && isOnSdCard(destFile)) {
-                DocumentFile file = getDocumentFile(destFile);
+                DocumentFile file = getDocumentFile(destFile, false);
                 if (file != null && file.canWrite()) {
                     out = mContext.getContentResolver().openOutputStream(file.getUri());
                 }
