@@ -5,4 +5,5 @@ echo '555'
 #./gradlew assembleRelease
 #./gradlew assembleDebug
 #./gradlew assembleMy
-./gradlew installMy
+./gradlew installBeta
+#./gradlew installRelease

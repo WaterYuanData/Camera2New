@@ -12,7 +12,7 @@ android {
         versionName String.valueOf(project.properties.myName)
         testInstrumentationRunner "android.support.test.runner.AndroidJUnitRunner"
 
-        buildConfigField("boolean", "LOG_D", "false")
+        buildConfigField("boolean", "LOG_DEBUG", "false")
         buildConfigField "String", "APP_NAME", '"你好"'
     }
 
@@ -29,11 +29,13 @@ android {
         release {
             minifyEnabled false
             proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
+            buildConfigField("boolean", "LOG_DEBUG", "false")
+            signingConfig signingConfigs.my
         }
         beta {
             minifyEnabled false
             buildConfigField "String", "APP_NAME", '"debug"'
-            buildConfigField("boolean", "LOG_D", "true")
+            buildConfigField("boolean", "LOG_DEBUG", "true")
             signingConfig signingConfigs.my
         }
     }
