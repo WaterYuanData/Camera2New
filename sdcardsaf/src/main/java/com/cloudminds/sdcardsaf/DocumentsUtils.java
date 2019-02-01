@@ -1,11 +1,9 @@
 package com.cloudminds.sdcardsaf;
 
-import android.annotation.TargetApi;
 import android.content.Context;
 import android.content.Intent;
 import android.content.SharedPreferences;
 import android.net.Uri;
-import android.os.Build;
 import android.os.StatFs;
 import android.os.storage.StorageManager;
 import android.os.storage.StorageVolume;
@@ -17,6 +15,7 @@ import android.util.Log;
 
 import java.io.BufferedReader;
 import java.io.File;
+import java.io.FileDescriptor;
 import java.io.FileInputStream;
 import java.io.FileNotFoundException;
 import java.io.FileOutputStream;
@@ -24,8 +23,6 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.io.OutputStream;
-import java.util.ArrayList;
-import java.util.List;
 
 /**
  * 通过 存储访问框架(SAF) 访问外置SD卡
@@ -34,11 +31,12 @@ public class DocumentsUtils {
 
     private static final String TAG = DocumentsUtils.class.getSimpleName();
 
-    public static final long UNAVAILABLE = -1L;
-
+    /**
+     * 授权请求的requestCode
+     */
     public static final int OPEN_DOCUMENT_TREE_CODE = 8000;
 
-    private static List<String> sExtSdCardPaths = new ArrayList<>();
+    private static final long UNAVAILABLE = -1L;
 
     private static String mRootPath = "";
 
@@ -51,15 +49,46 @@ public class DocumentsUtils {
     }
 
     /**
-     * 在主Activity的onCreate方法中调用
+     * 初始化DocumentsUtils工具类,一般在主Activity的onCreate方法中调用即可
      *
-     * @param context 传入getApplicationContext()即可
+     * @param context 一般传入getApplicationContext()即可
      */
     public static void init(Context context) {
-        mContext = context;
-        setRootPath(mContext);
+        mContext = context.getApplicationContext();
+        reInit();
     }
 
+    /**
+     * 必须在插拔SD卡的广播接收器中调用该方法
+     */
+    public static void reInit() {
+        mRootPath = "";
+        mCameraDir = null;
+        File[] externals = mContext.getExternalFilesDirs("external");
+        for (File external : externals) {
+            try {
+                if (external == null) {
+                    Log.e(TAG, "setRootPath: null");
+                    break;
+                }
+                String canonicalPath = external.getCanonicalPath();
+                Log.i(TAG, "setRootPath: canonicalPath=" + canonicalPath);
+                if (!canonicalPath.contains("emulated")) {
+                    int indexOf = canonicalPath.indexOf("/Android/data/");
+                    mRootPath = canonicalPath.substring(0, indexOf);
+                    mCameraDir = new File(mRootPath + "/DCIM/Camera");
+                    break;
+                }
+            } catch (IOException e) {
+                e.printStackTrace();
+                Log.e(TAG, "setRootPath: failed");
+            }
+        }
+    }
+
+    /**
+     * 获取SD卡的规范化全路径
+     */
     public static String getSdRootPath() {
         if (mRootPath == null) {
             Log.e(TAG, "getRootPath: is null");
@@ -67,6 +96,32 @@ public class DocumentsUtils {
         return mRootPath;
     }
 
+    /**
+     * 判断SD卡是否已有效加载
+     */
+    public static boolean isMounted() {
+        return !TextUtils.isEmpty(mRootPath);
+    }
+
+    /**
+     * 获取SD卡可用空间
+     */
+    public static long getSDAvailableSpace() {
+        if (TextUtils.isEmpty(mRootPath)) {
+            return DocumentsUtils.UNAVAILABLE;
+        }
+        try {
+            StatFs stat = new StatFs(mRootPath);
+            return stat.getAvailableBlocksLong() * stat.getBlockSizeLong();
+        } catch (IllegalArgumentException e) {
+            Log.e(TAG, "Failed to access external storage", e);
+        }
+        return DocumentsUtils.UNAVAILABLE;
+    }
+
+    /**
+     * 获取SD卡上Camera的规范化路径,后续会移除
+     */
     public static String getSdCameraDirectory() {
         String cameraDirectory = "";
         if (mCameraDir == null) {
@@ -81,21 +136,14 @@ public class DocumentsUtils {
         return cameraDirectory;
     }
 
-    public static long getSDAvailableSpace() {
-        try {
-            StatFs stat = new StatFs(mRootPath);
-            return stat.getAvailableBlocksLong() * stat.getBlockSizeLong();
-        } catch (IllegalArgumentException e) {
-            Log.e(TAG, "Failed to access external storage", e);
-        }
-        return DocumentsUtils.UNAVAILABLE;
-    }
 
-    public static boolean isMounted() {
-        return !TextUtils.isEmpty(mRootPath);
-    }
-
+    /**
+     * 判读SD上Camera的路径是否可用,后续会移除
+     */
     public static boolean isSdCameraDirAvailable() {
+        if (mCameraDir == null) {
+            return false;
+        }
         boolean isCameraDirAvailable = false;
         if (isMounted() && (mCameraDir.isDirectory() || mkdirs(mCameraDir))) {
             isCameraDirAvailable = canWriteByDoc(mCameraDir);
@@ -103,162 +151,97 @@ public class DocumentsUtils {
         return isCameraDirAvailable;
     }
 
+    /**
+     * 获取SD卡文件系统的类型,即SD卡的格式
+     */
     public static String getSdCardFileSystemType() {
         String resultString = "";
-        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.N) {
-            StorageManager sm = mContext.getSystemService(StorageManager.class);
-            StorageVolume volume = sm.getStorageVolume(new File(mRootPath));
-            String sdCardUuid = volume != null ? volume.getUuid() : null;
-            Log.i(TAG, "getFileSystemType: sdCardUuid=" + sdCardUuid);
-            if (sdCardUuid != null) {
-                Process mount = null;
-                BufferedReader reader = null;
-                try {
-                    mount = Runtime.getRuntime().exec("mount");
-                    reader = new BufferedReader(new InputStreamReader(mount.getInputStream()));
-                    mount.waitFor();
-                    String line;
-                    boolean isResult = false;
-                    while ((line = reader.readLine()) != null) {
-                        if (line.contains(sdCardUuid)) {
-                            Log.i(TAG, "getFileSystemType: line=" + line);
-                        }
-                        if (!isResult) {
-                            String[] split = line.split("\\s+");
-                            int length = split.length;
-                            for (int i = 0; i < length; i++) {
-                                if (split[i].endsWith(sdCardUuid) && (i + 2 < length) && !split[i + 2].contains(sdCardUuid)) {
-                                    isResult = true;
-                                    resultString = split[i + 2];
-                                }
+        StorageManager sm = mContext.getSystemService(StorageManager.class);
+        if (sm == null) {
+            return resultString;
+        }
+        StorageVolume volume = sm.getStorageVolume(new File(mRootPath));
+        String sdCardUuid = volume != null ? volume.getUuid() : null;
+        Log.i(TAG, "getFileSystemType: sdCardUuid=" + sdCardUuid);
+        if (sdCardUuid != null) {
+            Process mount = null;
+            BufferedReader reader = null;
+            try {
+                mount = Runtime.getRuntime().exec("mount");
+                reader = new BufferedReader(new InputStreamReader(mount.getInputStream()));
+                mount.waitFor();
+                String line;
+                boolean isResult = false;
+                while ((line = reader.readLine()) != null) {
+                    if (line.contains(sdCardUuid)) {
+                        Log.i(TAG, "getFileSystemType: line=" + line);
+                    }
+                    if (!isResult) {
+                        String[] split = line.split("\\s+");
+                        int length = split.length;
+                        for (int i = 0; i < length; i++) {
+                            if (split[i].endsWith(sdCardUuid) && (i + 2 < length) && !split[i + 2].contains(sdCardUuid)) {
+                                isResult = true;
+                                resultString = split[i + 2];
                             }
                         }
                     }
-                } catch (IOException | InterruptedException e) {
-                    e.printStackTrace();
-                } finally {
-                    if (reader != null) {
-                        try {
-                            reader.close();
-                        } catch (IOException e) {
-                            e.printStackTrace();
-                        }
+                }
+            } catch (IOException | InterruptedException e) {
+                e.printStackTrace();
+            } finally {
+                if (reader != null) {
+                    try {
+                        reader.close();
+                    } catch (IOException e) {
+                        e.printStackTrace();
                     }
-                    if (mount != null) {
-                        mount.destroy();
-                    }
+                }
+                if (mount != null) {
+                    mount.destroy();
                 }
             }
         }
         return resultString;
     }
 
-    public static void setRootPath(Context context) {
-        File[] externals = context.getExternalFilesDirs("external");
-        for (int i = 0; i < externals.length; i++) {
-            try {
-                String canonicalPath = externals[i].getCanonicalPath();
-                Log.i(TAG, "getRootPath: canonicalPath=" + canonicalPath);
-                if (!canonicalPath.contains("emulated")) {
-                    int indexOf = canonicalPath.indexOf("/Android/data/");
-                    mRootPath = canonicalPath.substring(0, indexOf);
-                    mCameraDir = new File(mRootPath + "/DCIM/Camera");
-                    Log.i(TAG, "getRootPath: mRootPath=" + mRootPath);
-                    break;
-                }
-            } catch (IOException e) {
-                e.printStackTrace();
-                Log.e(TAG, "getRootPath: failed");
-            }
-        }
-    }
-
     /**
-     * 插拔SD卡的接收器中调用该方法
+     * 判断一个文件路径是否在SD卡上
      */
-    public static void cleanCache() {
-        sExtSdCardPaths.clear();
-        mRootPath = "";
-        mCameraDir = null;
-        setRootPath(mContext);
-    }
-
-    /**
-     * Get a list of external SD card paths. (Kitkat or higher.)
-     *
-     * @return A list of external SD card paths.
-     */
-    @TargetApi(Build.VERSION_CODES.KITKAT)
-    private static String[] getExtSdCardPaths() {
-        if (sExtSdCardPaths.size() > 0) {
-            return sExtSdCardPaths.toArray(new String[0]);
-        }
-        for (File file : mContext.getExternalFilesDirs("external")) {
-            if (file != null && !file.equals(mContext.getExternalFilesDir("external"))) {
-                int index = file.getAbsolutePath().lastIndexOf("/Android/data");
-                if (index < 0) {
-                    Log.w(TAG, "Unexpected external file dir: " + file.getAbsolutePath());
-                } else {
-                    String path = file.getAbsolutePath().substring(0, index);
-                    try {
-                        path = new File(path).getCanonicalPath();
-                    } catch (IOException e) {
-                        // Keep non-canonical path.
-                    }
-                    sExtSdCardPaths.add(path);
-                }
-            }
-        }
-        if (sExtSdCardPaths.isEmpty()) sExtSdCardPaths.add("/storage/sdcard1");
-        return sExtSdCardPaths.toArray(new String[0]);
-    }
-
-    /**
-     * Determine the main folder of the external SD card containing the given file.
-     *
-     * @param file the file.
-     * @return The main folder of the external SD card containing this file, if the file is on an SD
-     * card. Otherwise,
-     * null is returned.
-     */
-    @TargetApi(Build.VERSION_CODES.KITKAT)
-    private static String getExtSdCardFolder(final File file) {
-        String[] extSdPaths = getExtSdCardPaths();
-        try {
-            for (int i = 0; i < extSdPaths.length; i++) {
-                if (file.getCanonicalPath().startsWith(extSdPaths[i])) {
-                    return extSdPaths[i];
-                }
-            }
-        } catch (IOException e) {
-            return null;
-        }
-        return null;
-    }
-
-    public static boolean isOnSdCard(final String file) {
+    public static boolean isOnSdCard(String file) {
         return isOnSdCard(new File(file));
     }
 
     /**
-     * Determine if a file is on external sd card. (Kitkat or higher.)
-     *
-     * @param file The file.
-     * @return true if on external sd card.
+     * 判断一个文件是否在SD卡上
      */
-    @TargetApi(Build.VERSION_CODES.KITKAT)
-    public static boolean isOnSdCard(final File file) {
+    public static boolean isOnSdCard(File file) {
         return getExtSdCardFolder(file) != null;
     }
 
-    public static DocumentFile getDocumentFile(String file, final boolean isDirectory, String mimeType) {
-        return getDocumentFile(new File(file), isDirectory, mimeType);
+    /**
+     * 获取一个文件在SD卡上的跟目录,如果不在SD上卡返回null
+     */
+    private static String getExtSdCardFolder(File file) {
+        if (!TextUtils.isEmpty(mRootPath)) {
+            try {
+                if (file.getCanonicalPath().startsWith(mRootPath)) {
+                    return mRootPath;
+                }
+            } catch (IOException e) {
+                e.printStackTrace();
+                return null;
+            }
+        }
+        return null;
     }
 
-    public static DocumentFile getDocumentFile(final File file, final boolean isDirectory, String mimeType) {
-        if (Build.VERSION.SDK_INT <= Build.VERSION_CODES.KITKAT) {
-            return DocumentFile.fromFile(file);
-        }
+    /**
+     * 获取文件对应的DocumentFile,如果文件不存在会自动创建
+     *
+     * @param mimeType 非路径文件的文件类型
+     */
+    public static DocumentFile getDocumentFile(File file, boolean isDirectory, String mimeType) {
         String baseFolder = getExtSdCardFolder(file);
         boolean originalDirectory = false;
         if (baseFolder == null) {
@@ -278,18 +261,24 @@ public class DocumentsUtils {
             originalDirectory = true;
             //continue
         }
-        String as = PreferenceManager.getDefaultSharedPreferences(mContext).getString(baseFolder,
-                null);
+        String as = PreferenceManager.getDefaultSharedPreferences(mContext).getString(baseFolder, null);
         Uri treeUri = null;
-        if (as != null) treeUri = Uri.parse(as);
+        if (as != null) {
+            treeUri = Uri.parse(as);
+        }
         if (treeUri == null) {
             return null;
         }
         // start with root of SD card and then parse through document tree.
         DocumentFile document = DocumentFile.fromTreeUri(mContext, treeUri);
-        if (originalDirectory) return document;
+        if (originalDirectory) {
+            return document;
+        }
         String[] parts = relativePath.split("/");
         for (int i = 0; i < parts.length; i++) {
+            if (document == null) {
+                return null;
+            }
             DocumentFile nextDocument = document.findFile(parts[i]);
             if (nextDocument == null) {
                 if ((i < parts.length - 1) || isDirectory) {
@@ -304,62 +293,22 @@ public class DocumentsUtils {
     }
 
     /**
-     * Get a DocumentFile corresponding to the given file (for writing on ExtSdCard on Android 5).
-     * If the file is not
-     * existing, it is created.
+     * 获取文件对应的DocumentFile,如果文件不存在会自动创建
      *
-     * @param file        The file.
-     * @param isDirectory flag indicating if the file should be a directory.
+     * @param file The file.
      * @return The DocumentFile
      */
-    public static DocumentFile getDocumentFile(final File file, final boolean isDirectory) {
-        if (Build.VERSION.SDK_INT <= Build.VERSION_CODES.KITKAT) {
-            return DocumentFile.fromFile(file);
-        }
-        String baseFolder = getExtSdCardFolder(file);
-        boolean originalDirectory = false;
-        if (baseFolder == null) {
-            return null;
-        }
-        String relativePath = null;
-        try {
-            String fullPath = file.getCanonicalPath();
-            if (!baseFolder.equals(fullPath)) {
-                relativePath = fullPath.substring(baseFolder.length() + 1);
-            } else {
-                originalDirectory = true;
-            }
-        } catch (IOException e) {
-            return null;
-        } catch (Exception f) {
-            originalDirectory = true;
-            //continue
-        }
-        String as = PreferenceManager.getDefaultSharedPreferences(mContext).getString(baseFolder,
-                null);
-        Uri treeUri = null;
-        if (as != null) treeUri = Uri.parse(as);
-        if (treeUri == null) {
-            return null;
-        }
-        // start with root of SD card and then parse through document tree.
-        DocumentFile document = DocumentFile.fromTreeUri(mContext, treeUri);
-        if (originalDirectory) return document;
-        String[] parts = relativePath.split("/");
-        for (int i = 0; i < parts.length; i++) {
-            DocumentFile nextDocument = document.findFile(parts[i]);
-            if (nextDocument == null) {
-                if ((i < parts.length - 1) || isDirectory) {
-                    nextDocument = document.createDirectory(parts[i]);
-                } else {
-                    nextDocument = document.createFile("image", parts[i]);
-                }
-            }
-            document = nextDocument;
-        }
-        return document;
+    public static DocumentFile getDocumentFile(File file) {
+        return getDocumentFile(file, false, "");
     }
 
+    public static DocumentFile getDocumentFile(File file, boolean isDirectory) {
+        return getDocumentFile(file, isDirectory, "");
+    }
+
+    /**
+     * 兼容DocumentFile的创建文件
+     */
     public static boolean mkdirs(File dir) {
         boolean res = dir.mkdirs();
         if (!res) {
@@ -371,10 +320,13 @@ public class DocumentsUtils {
         return res;
     }
 
+    /**
+     * 兼容DocumentFile的删除文件
+     */
     public static boolean delete(File file) {
         boolean ret = file.delete();
         if (!ret && isOnSdCard(file)) {
-            DocumentFile f = getDocumentFile(file, false);
+            DocumentFile f = getDocumentFile(file);
             if (f != null) {
                 ret = f.delete();
             }
@@ -383,7 +335,7 @@ public class DocumentsUtils {
     }
 
     /**
-     * 判断 不借助DocumentFile的条件下,SDCard是否可写
+     * 不借助DocumentFile的条件下,判断文件是否可写
      */
     public static boolean canWriteNotByDoc(File file) {
         boolean res = file.exists() && file.canWrite();
@@ -402,7 +354,7 @@ public class DocumentsUtils {
     }
 
     /**
-     * 兼容DocumentFile
+     * 借助DocumentFile的条件下,判断文件是否可写
      */
     public static boolean canWriteByDoc(File file) {
         boolean res = canWriteNotByDoc(file);
@@ -413,12 +365,18 @@ public class DocumentsUtils {
         return res;
     }
 
+    /**
+     * 兼容DocumentFile的重命名
+     *
+     * @param src  重命名前的文件
+     * @param dest 重命名后的文件
+     */
     public static boolean renameTo(File src, File dest) {
         boolean res = src.renameTo(dest);
         if (!res && isOnSdCard(dest)) {
             DocumentFile srcDoc;
             if (isOnSdCard(src)) {
-                srcDoc = getDocumentFile(src, false);
+                srcDoc = getDocumentFile(src);
             } else {
                 srcDoc = DocumentFile.fromFile(src);
             }
@@ -427,7 +385,7 @@ public class DocumentsUtils {
                 try {
                     if (src.getParent().equals(dest.getParent())) {
                         res = srcDoc.renameTo(dest.getName());
-                    } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
+                    } else {
                         res = DocumentsContract.moveDocument(mContext.getContentResolver(),
                                 srcDoc.getUri(),
                                 srcDoc.getParentFile().getUri(),
@@ -441,11 +399,15 @@ public class DocumentsUtils {
         return res;
     }
 
+    /**
+     * 获取文件的FileInputStream
+     * 会根据 !canWriteNotByDoc && isOnSdCard 自动判断:用DocumentFile形式还是非DocumentFile形式
+     */
     public static InputStream getInputStream(File destFile) {
         InputStream in = null;
         try {
             if (!canWriteNotByDoc(destFile) && isOnSdCard(destFile)) {
-                DocumentFile file = getDocumentFile(destFile, false);
+                DocumentFile file = getDocumentFile(destFile);
                 if (file != null && file.canWrite()) {
                     in = mContext.getContentResolver().openInputStream(file.getUri());
                 }
@@ -458,15 +420,56 @@ public class DocumentsUtils {
         return in;
     }
 
+    /**
+     * 获取一个文件的FileDescriptor,一般用于MediaRecorder.setOutputFile
+     * 注意:调用前务必进行 !canWriteNotByDoc && isOnSdCard 判断,满足条件才能调用
+     */
+    public static FileDescriptor getFileDescriptor(String filePath) {
+        return getFileDescriptor(new File(filePath));
+    }
+
+
+    /**
+     * 获取一个文件的FileDescriptor,一般用于MediaRecorder.setOutputFile
+     * 注意:调用前务必进行 !canWriteNotByDoc && isOnSdCard 判断,满足条件才能调用
+     */
+    public static FileDescriptor getFileDescriptor(File destFile) {
+        FileDescriptor fileDescriptor = null;
+        Log.i(TAG, "getFileDescriptor: " + destFile.toString());
+        try {
+            if (!canWriteNotByDoc(destFile) && isOnSdCard(destFile)) {
+                DocumentFile file = getDocumentFile(destFile);
+                if (file != null && file.canWrite()) {
+                    fileDescriptor = mContext.getContentResolver().openFileDescriptor(file.getUri(), "rw").getFileDescriptor();
+                }
+            } else {
+                Log.e(TAG, "不满足调用 getFileDescriptor 的条件");
+            }
+        } catch (Exception e) {
+            e.printStackTrace();
+            Log.e(TAG, "getFileDescriptor: Failed");
+        }
+        return fileDescriptor;
+    }
+
+    /**
+     * 获取一个文件的FileOutputStream
+     * 会根据 !canWriteNotByDoc && isOnSdCard 自动判断:用DocumentFile形式还是非DocumentFile形式
+     */
     public static OutputStream getOutputStream(String destFile) {
         return getOutputStream(new File(destFile));
     }
 
+    /**
+     * 获取一个文件的FileOutputStream
+     * 会根据 !canWriteNotByDoc && isOnSdCard 自动判断:用DocumentFile形式还是非DocumentFile形式
+     */
     public static OutputStream getOutputStream(File destFile) {
         OutputStream out = null;
+        Log.i(TAG, "getOutputStream: " + destFile.toString());
         try {
             if (!canWriteNotByDoc(destFile) && isOnSdCard(destFile)) {
-                DocumentFile file = getDocumentFile(destFile, false);
+                DocumentFile file = getDocumentFile(destFile);
                 if (file != null && file.canWrite()) {
                     out = mContext.getContentResolver().openOutputStream(file.getUri());
                 }
@@ -475,11 +478,15 @@ public class DocumentsUtils {
             }
         } catch (FileNotFoundException e) {
             e.printStackTrace();
+            Log.e(TAG, "getOutputStream: Failed");
         }
         return out;
     }
 
-    public static boolean saveTreeUri(Context context, String rootPath, Uri uri) {
+    /**
+     * 保存授权框返回的Uri
+     */
+    public static boolean saveTreeUri(Uri uri) {
         DocumentFile file = DocumentFile.fromTreeUri(mContext, uri);
         if (file != null && file.canWrite()) {
             SharedPreferences perf = PreferenceManager.getDefaultSharedPreferences(mContext);
@@ -500,25 +507,17 @@ public class DocumentsUtils {
     }
 
     /**
-     * @return true if not writable
+     * 判断是否需要申请SD卡写权限,已兼容DocumentFile
      */
-    public static boolean checkWritableRootPath() {
+    public static boolean isNeedRequestWriteSDRootPath() {
+        Log.i(TAG, "isNeedRequestWriteSDRootPath: " + mRootPath);
+        if (TextUtils.isEmpty(mRootPath)) {
+            return false;
+        }
         File root = new File(mRootPath);
-        if (!TextUtils.isEmpty(mRootPath) && !root.canWrite()) {
-            Log.d(TAG, "checkWritableRootPath: ");
-            if (isOnSdCard(root)) {
-                DocumentFile documentFile = getDocumentFile(root, true);
-                return documentFile == null || !documentFile.canWrite();
-            } else {
-                SharedPreferences perf = PreferenceManager.getDefaultSharedPreferences(mContext);
-                String documentUri = perf.getString(mRootPath, "");
-                if (documentUri == null || documentUri.isEmpty()) {
-                    return true;
-                } else {
-                    DocumentFile file = DocumentFile.fromTreeUri(mContext, Uri.parse(documentUri));
-                    return !(file != null && file.canWrite());
-                }
-            }
+        if (!root.canWrite()) {
+            DocumentFile documentFile = getDocumentFile(root, true);
+            return documentFile == null || !documentFile.canWrite();
         }
         return false;
     }
