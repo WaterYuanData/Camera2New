@@ -20,6 +20,9 @@ android {
             minifyEnabled false
             proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
         }
+        beta {
+//            Unable to resolve dependency for ':test1@beta/compileClasspath': Could not resolve project :aarlib.
+        }
     }
 
 }
