@@ -1,1 +1,1 @@
-include ':app', ':aarlib', ':test1', ':test2', ':sdcardsaf'
+include ':app', ':aarlib', ':test1', ':test2', ':sdcardsaf', ':testbeta'
