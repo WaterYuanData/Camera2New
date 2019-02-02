@@ -93,6 +93,8 @@ public class MainActivity extends AppCompatActivity {
                         capture();
                         break;
                     case R.id.button2:
+                        Log.d(TAG, "onClick: 再次预览");
+                        startPreview();
                         break;
                 }
             }
@@ -225,10 +227,10 @@ public class MainActivity extends AppCompatActivity {
             CameraCaptureSession.CaptureCallback mImageSavedCallback = new CameraCaptureSession.CaptureCallback() {
                 @Override
                 public void onCaptureCompleted(CameraCaptureSession session, CaptureRequest request, TotalCaptureResult result) {
-                    Toast.makeText(getApplicationContext(), "Image Saved!", Toast.LENGTH_SHORT).show();
-                    Log.d(TAG, "onCaptureCompleted: Image Saved!");
+                    Toast.makeText(getApplicationContext(), "已保存", Toast.LENGTH_SHORT).show();
+                    Log.d(TAG, "onCaptureCompleted: 已保存");
                     //重启预览
-                    // restartPreview();
+                    startPreview();
                 }
             };
             //停止预览
