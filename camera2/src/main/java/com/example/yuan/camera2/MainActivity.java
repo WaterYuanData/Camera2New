@@ -12,6 +12,8 @@ import android.hardware.camera2.CameraCharacteristics;
 import android.hardware.camera2.CameraDevice;
 import android.hardware.camera2.CameraManager;
 import android.hardware.camera2.CaptureRequest;
+import android.hardware.camera2.CaptureResult;
+import android.hardware.camera2.TotalCaptureResult;
 import android.hardware.camera2.params.StreamConfigurationMap;
 import android.media.Image;
 import android.media.ImageReader;
@@ -65,7 +67,7 @@ public class MainActivity extends AppCompatActivity {
         mTextureListener = new TextureView.SurfaceTextureListener() {
             @Override
             public void onSurfaceTextureAvailable(SurfaceTexture surface, int width, int height) {
-                Log.d(TAG, "onSurfaceTextureAvailable: width=" + width + " height=" + height);
+                Log.d(TAG, "onSurfaceTextureAvailable: 当SurefaceTexture可用的时候，设置相机参数并打开相机 width=" + width + " height=" + height);
                 //当SurefaceTexture可用的时候，设置相机参数并打开相机
                 setupCamera(width, height);
                 openCamera();
@@ -91,25 +93,34 @@ public class MainActivity extends AppCompatActivity {
         mStateCallback = new CameraDevice.StateCallback() {
             @Override
             public void onOpened(CameraDevice camera) {
+                Log.d(TAG, "onOpened: 已打开相机,接下来开始预览");
                 mCameraDevice = camera;
-
                 //开启预览
                 startPreview();
             }
 
             @Override
             public void onDisconnected(@NonNull CameraDevice camera) {
-
+                Log.d(TAG, "onDisconnected: ");
             }
 
             @Override
             public void onError(@NonNull CameraDevice camera, int error) {
-
+                Log.d(TAG, "onError: ");
             }
         };
 
         mSessionCaptureCallback = new CameraCaptureSession.CaptureCallback() {
             // todo
+            @Override
+            public void onCaptureCompleted(CameraCaptureSession session, CaptureRequest request, TotalCaptureResult result) {
+                // Log.d(TAG, "onCaptureCompleted: 完成 会一直打印");
+            }
+
+            @Override
+            public void onCaptureProgressed(@NonNull CameraCaptureSession session, @NonNull CaptureRequest request, @NonNull CaptureResult partialResult) {
+                // Log.d(TAG, "onCaptureProgressed: 过程中 会一直打印");
+            }
         };
     }
 
@@ -117,7 +128,6 @@ public class MainActivity extends AppCompatActivity {
     /**
      * https://www.cnblogs.com/renhui/p/8718758.html
      * 5、实现PreviewCallback
-     *
      */
     public void beforeStartPreview() {
         setupImageReader();
@@ -148,6 +158,7 @@ public class MainActivity extends AppCompatActivity {
                 StreamConfigurationMap map = characteristics.get(CameraCharacteristics.SCALER_STREAM_CONFIGURATION_MAP);
                 //根据TextureView的尺寸设置预览尺寸
                 mPreviewSize = getOptimalSize(map.getOutputSizes(SurfaceTexture.class), width, height);
+                Log.d(TAG, "setupCamera: mPreviewSize=" + mPreviewSize.toString());
                 mCameraId = cameraId;
                 break;
             }
@@ -158,43 +169,44 @@ public class MainActivity extends AppCompatActivity {
 
 
     //region getOptimalSize
+
     /**
-    * 02-01 22:53:44.044 18670-18670/com.example.yuan.camera2 I/Camera2: getOptimalSize: 4056x3040
-    getOptimalSize: 4056x2704
-    getOptimalSize: 4000x3000
-    getOptimalSize: 3840x2160
-    getOptimalSize: 3264x2448
-    getOptimalSize: 3200x2400
-    getOptimalSize: 2976x2976
-    getOptimalSize: 2592x1944
-    getOptimalSize: 2560x1440
-02-01 22:53:44.045 18670-18670/com.example.yuan.camera2 I/Camera2: getOptimalSize: 2688x1512
-    getOptimalSize: 2048x1536
-    getOptimalSize: 1920x1080
-    getOptimalSize: 2560x800
-    getOptimalSize: 1600x1200
-    getOptimalSize: 1440x1080
-    getOptimalSize: 1280x960
-    getOptimalSize: 1280x768
-    getOptimalSize: 1280x720
-    getOptimalSize: 1200x1200
-    getOptimalSize: 1280x480
-    getOptimalSize: 1280x400
-    getOptimalSize: 1024x768
-    getOptimalSize: 800x600
-    getOptimalSize: 864x480
-    getOptimalSize: 800x480
-    getOptimalSize: 720x480
-    getOptimalSize: 640x480
-    getOptimalSize: 640x360
-02-01 22:53:44.046 18670-18670/com.example.yuan.camera2 I/Camera2: getOptimalSize: 480x640
-    getOptimalSize: 480x360
-    getOptimalSize: 480x320
-    getOptimalSize: 352x288
-    getOptimalSize: 320x240
-    getOptimalSize: 240x320
-    getOptimalSize: 176x144
-    * */
+     * 02-01 22:53:44.044 18670-18670/com.example.yuan.camera2 I/Camera2: getOptimalSize: 4056x3040
+     * getOptimalSize: 4056x2704
+     * getOptimalSize: 4000x3000
+     * getOptimalSize: 3840x2160
+     * getOptimalSize: 3264x2448
+     * getOptimalSize: 3200x2400
+     * getOptimalSize: 2976x2976
+     * getOptimalSize: 2592x1944
+     * getOptimalSize: 2560x1440
+     * 02-01 22:53:44.045 18670-18670/com.example.yuan.camera2 I/Camera2: getOptimalSize: 2688x1512
+     * getOptimalSize: 2048x1536
+     * getOptimalSize: 1920x1080
+     * getOptimalSize: 2560x800
+     * getOptimalSize: 1600x1200
+     * getOptimalSize: 1440x1080
+     * getOptimalSize: 1280x960
+     * getOptimalSize: 1280x768
+     * getOptimalSize: 1280x720
+     * getOptimalSize: 1200x1200
+     * getOptimalSize: 1280x480
+     * getOptimalSize: 1280x400
+     * getOptimalSize: 1024x768
+     * getOptimalSize: 800x600
+     * getOptimalSize: 864x480
+     * getOptimalSize: 800x480
+     * getOptimalSize: 720x480
+     * getOptimalSize: 640x480
+     * getOptimalSize: 640x360
+     * 02-01 22:53:44.046 18670-18670/com.example.yuan.camera2 I/Camera2: getOptimalSize: 480x640
+     * getOptimalSize: 480x360
+     * getOptimalSize: 480x320
+     * getOptimalSize: 352x288
+     * getOptimalSize: 320x240
+     * getOptimalSize: 240x320
+     * getOptimalSize: 176x144
+     */
     //endregion
     public Size getOptimalSize(Size[] sizes, int width, int height) {
         Size size;
@@ -203,6 +215,7 @@ public class MainActivity extends AppCompatActivity {
             // Log.i(TAG, "getOptimalSize: " + sizes[i].toString());
         }
         size = sizes[8];
+        size = sizes[25];
         return size;
     }
 
@@ -238,6 +251,7 @@ public class MainActivity extends AppCompatActivity {
             mCameraDevice.createCaptureSession(Arrays.asList(mSurface), new CameraCaptureSession.StateCallback() {
                 @Override
                 public void onConfigured(CameraCaptureSession session) {
+                    Log.i(TAG, "onConfigured: 创建createCaptureSession的状态回调");
                     try {
                         //创建捕获请求
                         mCaptureRequest = mCaptureRequestBuilder.build();
