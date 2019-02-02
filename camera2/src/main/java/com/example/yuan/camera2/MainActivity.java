@@ -166,6 +166,12 @@ public class MainActivity extends AppCompatActivity {
 
     private static final SparseIntArray ORIENTATION = new SparseIntArray();
 
+
+    /**
+     * 屏幕方向=0 拍照方向=90
+     * 屏幕方向=1 拍照方向=0
+     * 屏幕方向=3 拍照方向=180
+     * */
     static {
         ORIENTATION.append(Surface.ROTATION_0, 90);
         ORIENTATION.append(Surface.ROTATION_90, 0);
@@ -187,7 +193,7 @@ public class MainActivity extends AppCompatActivity {
             ByteBuffer buffer = mImage.getPlanes()[0].getBuffer();
             byte[] data = new byte[buffer.remaining()];
             buffer.get(data);
-            mImageFile = new File(Environment.getExternalStorageDirectory() + "/DCIM/myPicture.jpg");
+            mImageFile = new File(Environment.getExternalStorageDirectory() + "/DCIM/Pic_" + System.currentTimeMillis() + ".jpg");
             try {
                 Log.d(TAG, "run: mImageFile=" + mImageFile.getCanonicalPath());
             } catch (IOException e) {
@@ -223,6 +229,7 @@ public class MainActivity extends AppCompatActivity {
             mCaptureBuilder.addTarget(mImageReader.getSurface());
             //设置拍照方向
             mCaptureBuilder.set(CaptureRequest.JPEG_ORIENTATION, ORIENTATION.get(rotation));
+            Log.d(TAG, "capture: 屏幕方向=" + rotation + " 拍照方向=" + ORIENTATION.get(rotation));
             //这个回调接口用于拍照结束时重启预览，因为拍照会导致预览停止
             CameraCaptureSession.CaptureCallback mImageSavedCallback = new CameraCaptureSession.CaptureCallback() {
                 @Override
