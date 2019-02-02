@@ -8,8 +8,10 @@ android {
         applicationId manifest.@package.text()
         minSdkVersion 26
         targetSdkVersion 28
-        versionCode Integer.parseInt(project.properties.myVersion)
-        versionName String.valueOf(project.properties.myName)
+//        versionCode Integer.parseInt(project.properties.myVersion)
+//        versionName String.valueOf(project.properties.myName)
+        versionCode 1
+        versionName "1.0"
         testInstrumentationRunner "android.support.test.runner.AndroidJUnitRunner"
 
         buildConfigField("boolean", "LOG_DEBUG", "false")
@@ -20,7 +22,7 @@ android {
         my {
             keyAlias 'key0'
             keyPassword '123456'
-            storeFile file('D:/MyCode/TestAAR/app/myKey.jks')
+            storeFile file('../app/myKey.jks')
             storePassword '123456'
         }
     }
