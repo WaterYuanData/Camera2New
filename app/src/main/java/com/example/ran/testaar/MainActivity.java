@@ -9,9 +9,10 @@ import android.os.Bundle;
 import android.util.Log;
 import android.view.View;
 
-import com.cloudminds.sdcardsaf.DocumentsUtils;
+import com.cloudminds.storage.DocumentsUtils;
 
 import java.io.File;
+import java.io.OutputStream;
 
 public class MainActivity extends AppCompatActivity {
 
@@ -55,6 +56,23 @@ public class MainActivity extends AppCompatActivity {
         new File(s2).mkdirs();
         DocumentsUtils.mkdirs(new File(s3));
         DocumentsUtils.mkdirs(new File(s4));
+
+        testfile();
+    }
+
+    void testfile() {
+        String sdRootPath = DocumentsUtils.getSdRootPath();
+        String s1 = sdRootPath + "/testfile/1";
+        String s2 = sdRootPath + "/testfile/1/2.txt";
+        DocumentsUtils.getDocumentFile(new File(s1), false);
+        OutputStream outputStream = DocumentsUtils.getOutputStream(s1);
+        DocumentsUtils.getDocumentFile(new File(s2), false);
+        /**
+         * getDocumentFile返回值可能为null,会致使getOutputStream也为null
+         * 把s1生成文件即可导致s2生成为null
+         * 把s1生成文件夹才能使s2不为null
+         * */
+        outputStream = DocumentsUtils.getOutputStream(s2);
     }
 
     @Override
