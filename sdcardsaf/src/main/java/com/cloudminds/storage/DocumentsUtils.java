@@ -1,5 +1,6 @@
 package com.cloudminds.storage;
 
+import android.app.Activity;
 import android.content.Context;
 import android.content.Intent;
 import android.content.SharedPreferences;
@@ -23,6 +24,7 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.io.OutputStream;
+import java.lang.reflect.Constructor;
 
 /**
  * 通过 存储访问框架(SAF) 访问外置SD卡
@@ -41,6 +43,8 @@ public class DocumentsUtils {
     private static String mRootPath = "";
 
     private static Context mContext;
+
+    private static Class<?> treeDocumentFile = null;
 
     private DocumentsUtils() {
 
@@ -247,18 +251,24 @@ public class DocumentsUtils {
         if (treeUri == null) {
             return null;
         }
+
         // start with root of SD card and then parse through document tree.
         DocumentFile document = DocumentFile.fromTreeUri(mContext, treeUri);
         if (originalDirectory) {
             return document;
         }
         String[] parts = relativePath.split("/");
+        String searchPath = "";
+        String rootId = DocumentsContract.getTreeDocumentId(treeUri);
+
         for (int i = 0; i < parts.length; i++) {
             if (document == null) {
                 return null;
             }
-            DocumentFile nextDocument = document.findFile(parts[i]);
-            if (nextDocument == null) {
+            searchPath = searchPath + (searchPath.length() > 0 ? "/" : "") + parts[i];
+            Uri docUri = DocumentsContract.buildDocumentUriUsingTree(treeUri, rootId + searchPath);
+            DocumentFile nextDocument = createTreeDocumentFile(document, mContext, docUri);
+            if (nextDocument != null && !nextDocument.exists()) {
                 if ((i < parts.length - 1) || isDirectory) {
                     nextDocument = document.createDirectory(parts[i]);
                 } else {
@@ -329,7 +339,6 @@ public class DocumentsUtils {
         }
         return res;
     }
-
     /**
      * 兼容DocumentFile的重命名文件/文件夹
      *
@@ -338,6 +347,18 @@ public class DocumentsUtils {
      * @param isDirectory 指明文件/文件夹
      */
     public static boolean renameTo(File src, File dest, boolean isDirectory) {
+        return renameTo(src, dest, isDirectory, "");
+    }
+
+    /**
+     * 兼容DocumentFile的重命名文件/文件夹
+     *
+     * @param src         重命名前的源文件
+     * @param dest        重命名后的目标文件
+     * @param isDirectory 指明文件/文件夹
+     * @param mimeType the mime type of the target file
+     */
+    public static boolean renameTo(File src, File dest, boolean isDirectory, String mimeType) {
         boolean res = src.renameTo(dest);
         if (!res && isOnSdCard(dest)) {
             DocumentFile srcDoc;
@@ -346,7 +367,7 @@ public class DocumentsUtils {
             } else {
                 srcDoc = DocumentFile.fromFile(src);
             }
-            DocumentFile destDoc = getDocumentFile(dest.getParentFile(), isDirectory);
+            DocumentFile destDoc = getDocumentFile(dest.getParentFile(), isDirectory, mimeType);
             if (srcDoc != null && destDoc != null) {
                 try {
                     if (src.getParent().equals(dest.getParent())) {
@@ -450,6 +471,34 @@ public class DocumentsUtils {
     }
 
     /**
+     * 在documentFile下快速创建destFile所指定的文件
+     */
+    public static OutputStream getOutputStream(File destFile, DocumentFile documentFile) {
+        OutputStream out = null;
+        if (destFile != null) {
+            Log.i(TAG, "getOutputStream: destFile=" + destFile.toString());
+            try {
+                if (!canWriteNotByDoc(destFile) && isOnSdCard(destFile) && documentFile != null) {
+                    Log.i(TAG, "getOutputStream: documentFile=" + documentFile.getUri().getPath());
+                    String canonicalPath = destFile.getCanonicalPath();
+                    String substring = canonicalPath.substring(canonicalPath.lastIndexOf(File.separator) + 1);
+                    DocumentFile file = documentFile.createFile("", substring);
+                    if (file != null && file.canWrite()) {
+                        out = mContext.getContentResolver().openOutputStream(file.getUri());
+                    }
+                } else {
+                    out = new FileOutputStream(destFile);
+                }
+            } catch (FileNotFoundException e) {
+                Log.e(TAG, "getOutputStream: Failed");
+            } catch (IOException e) {
+                Log.e(TAG, "getOutputStream: getCanonicalPath Failed");
+            }
+        }
+        return out;
+    }
+
+    /**
      * 保存授权框返回的Uri
      */
     public static boolean saveTreeUri(Uri uri) {
@@ -486,5 +535,60 @@ public class DocumentsUtils {
             return documentFile == null || !documentFile.canWrite();
         }
         return false;
+    }
+
+    /**
+     * Request write sdcard root path permission.
+     * @param activity the activity request this permission and handle the request result.
+     */
+    public static void requestWriteSDcardPermission(Activity activity) {
+        Intent intent = null;
+        StorageManager sm = (StorageManager) activity.getSystemService(Context.STORAGE_SERVICE);
+        StorageVolume volume = sm.getStorageVolume(new File(DocumentsUtils.getSdRootPath()));
+        if (volume != null) {
+            intent = volume.createAccessIntent(null);
+        }
+        if (intent == null) {
+            intent = new Intent(Intent.ACTION_OPEN_DOCUMENT_TREE);
+        }
+        activity.startActivityForResult(intent, DocumentsUtils.OPEN_DOCUMENT_TREE_CODE);
+    }
+
+    /**
+     * Get the Uri of the SDcard Document File.
+     * @param filePath the path of the file
+     * @return The Uri of the file if it exist on SDcard, otherwise null.
+     */
+    public static Uri getDocumentFileUri(String filePath) {
+        Uri docUri = null;
+        Log.d(TAG, "getDocumentFileUri: " + filePath);
+        try {
+            File file =  new File(filePath);
+            DocumentFile docfile = getDocumentFile(file, file.isDirectory());
+            if (docfile != null) {
+                docUri = docfile.getUri();
+            }
+        } catch (Exception e) {
+            e.printStackTrace();
+            Log.e(TAG, "getDocumentFileUri: Failed");
+        }
+        return docUri;
+    }
+
+    private synchronized static DocumentFile createTreeDocumentFile(DocumentFile parent,
+                                                                    Context context, Uri uri) {
+        try {
+            if (treeDocumentFile == null) {
+                treeDocumentFile = Class.forName(
+                        "android.support.v4.provider.TreeDocumentFile");
+            }
+            Class[] argClasses = new Class[]{DocumentFile.class, Context.class, Uri.class};
+            Constructor<?> constructor = treeDocumentFile.getDeclaredConstructor(argClasses);
+            constructor.setAccessible(true);
+            return (DocumentFile) constructor.newInstance(parent, context, uri);
+        } catch (Exception e) {
+            Log.w(TAG, "createTreeDocumentFile failed.", e);
+        }
+        return null;
     }
 }
