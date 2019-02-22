@@ -10,3 +10,7 @@ test2只使用aarlib的.aar文件
 使用库sdcardsaf
 
 testbeta用于配置签名和buildTypes
+
+Camera2
+
+TestForView
