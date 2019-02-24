@@ -51,8 +51,8 @@ public class MainActivity extends AppCompatActivity {
     private String mCameraId;
     private CameraDevice.StateCallback mStateCallback;
     private CameraDevice mCameraDevice;
-    private CaptureRequest.Builder mCaptureRequestBuilder;
-    private CaptureRequest mCaptureRequest;
+    private CaptureRequest.Builder mPreviewRequestBuilder;
+    private CaptureRequest mPreviewRequest;
     private CameraCaptureSession mPreviewSession;
     private ImageReader mImageReader;
     private Size mPreviewSize;
@@ -193,6 +193,7 @@ public class MainActivity extends AppCompatActivity {
             ByteBuffer buffer = mImage.getPlanes()[0].getBuffer();
             byte[] data = new byte[buffer.remaining()];
             buffer.get(data);
+            new File(Environment.getExternalStorageDirectory() + "/DCIM/").mkdirs();
             mImageFile = new File(Environment.getExternalStorageDirectory() + "/DCIM/Pic_" + System.currentTimeMillis() + ".jpg");
             try {
                 Log.d(TAG, "run: mImageFile=" + mImageFile.getCanonicalPath());
@@ -260,7 +261,7 @@ public class MainActivity extends AppCompatActivity {
         Surface imageReaderSurface = mImageReader.getSurface();
 
         //CaptureRequest添加imageReaderSurface，不加的话就会导致ImageReader的onImageAvailable()方法不会回调
-        mCaptureRequestBuilder.addTarget(imageReaderSurface);
+//        mCaptureRequestBuilder.addTarget(imageReaderSurface);
 
         //创建CaptureSession时加上imageReaderSurface，如下，这样预览数据就会同时输出到previewSurface和imageReaderSurface了
         // mCameraDevice.createCaptureSession(Arrays.asList(previewSurface, imageReaderSurface), mSessionCaptureCallback);
@@ -378,25 +379,25 @@ public class MainActivity extends AppCompatActivity {
         //获取Surface显示预览数据
         Surface mSurface = new Surface(mSurfaceTexture);
         try {
-            //创建CaptureRequestBuilder，TEMPLATE_PREVIEW比表示预览请求
-            mCaptureRequestBuilder = mCameraDevice.createCaptureRequest(CameraDevice.TEMPLATE_PREVIEW);
+            //创建请求的Builder，TEMPLATE_PREVIEW表示预览请求
+            mPreviewRequestBuilder = mCameraDevice.createCaptureRequest(CameraDevice.TEMPLATE_PREVIEW);
             //设置Surface作为预览数据的显示界面
-            mCaptureRequestBuilder.addTarget(mSurface);
+            mPreviewRequestBuilder.addTarget(mSurface);
 
             // 调整方向
             // mCaptureRequestBuilder.set();
 
-            //创建相机捕获会话，第一个参数是捕获数据的输出Surface列表，第二个参数是CameraCaptureSession的状态回调接口，当它创建好后会回调onConfigured方法，第三个参数用来确定Callback在哪个线程执行，为null的话就在当前线程执行
+            //创建预览会话，第一个参数是捕获数据的输出Surface列表，第二个参数是CameraCaptureSession的状态回调接口，当它创建好后会回调onConfigured方法，第三个参数用来确定Callback在哪个线程执行，为null的话就在当前线程执行
             mCameraDevice.createCaptureSession(Arrays.asList(mSurface, mImageReader.getSurface()), new CameraCaptureSession.StateCallback() {
                 @Override
                 public void onConfigured(CameraCaptureSession session) {
                     Log.i(TAG, "onConfigured: 创建createCaptureSession的状态回调");
                     try {
-                        //创建捕获请求
-                        mCaptureRequest = mCaptureRequestBuilder.build();
+                        //预览请求成功后得到预览会话
+                        mPreviewRequest = mPreviewRequestBuilder.build();
                         mPreviewSession = session;
                         //设置反复捕获数据的请求，这样预览界面就会一直有数据显示
-                        mPreviewSession.setRepeatingRequest(mCaptureRequest, mSessionCaptureCallback, null);
+                        mPreviewSession.setRepeatingRequest(mPreviewRequest, mSessionCaptureCallback, null);
                     } catch (CameraAccessException e) {
                         e.printStackTrace();
                     }
