@@ -10,6 +10,7 @@ import android.widget.Scroller;
 
 public class ParentView extends LinearLayout {
 
+    private static final String TAG = "ParentView";
     private Scroller mScroller;
     private ViewA viewA;
     private int realHeight;
@@ -31,6 +32,19 @@ public class ParentView extends LinearLayout {
      * invalidate()方法：在View树重绘的时候会调用computeScrollOffset()方法
      */
     public void smoothScrollTo() {
+        Log.d(TAG, "testGet: getX=" + getX());
+        Log.d(TAG, "testGet: getScrollX=" + getScrollX());
+        Log.d(TAG, "testGet: getTranslationX=" + getTranslationX());
+        Log.d(TAG, "testGet: getLeft=" + getLeft());
+        Log.d(TAG, "testGet: getPaddingLeft=" + getPaddingLeft());
+        Log.d(TAG, "testGet: getY=" + getY());
+        Log.d(TAG, "testGet: getScrollY=" + getScrollY());
+        Log.d(TAG, "testGet: getTranslationY=" + getTranslationY());
+        Log.d(TAG, "testGet: getRight=" + getRight());
+        Log.d(TAG, "testGet: getPaddingRight=" + getPaddingRight());
+        Log.d(TAG, "testGet: getWidth=" + getWidth());
+        Log.d(TAG, "testGet: getHeight=" + getHeight());
+        Log.d(TAG, "testGet: getBottom=" + getBottom());
         viewA = (ViewA) getChildAt(0);
         int ScrollX = getScrollX();
         int ScrollY = getScrollY();
@@ -53,6 +67,10 @@ public class ParentView extends LinearLayout {
             Log.d("cylog", "滑动坐标" + "(" + getScrollX() + "," + getScrollY() + ")");
             scrollTo(currX, currY);
             postInvalidate();
+        } else {
+            int currX = mScroller.getCurrX();
+            int currY = mScroller.getCurrY();
+            Log.i("cylog", "滑动坐标" + "(" + getScrollX() + "," + getScrollY() + ")");
         }
     }
 }
