@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <dimen name="preview_size_width_1280px">365.714dp</dimen>
+    <dimen name="preview_size_height_960px">274.286dp</dimen>
+    <dimen name="preview_size_height_720px">205.714dp</dimen>
+</resources>

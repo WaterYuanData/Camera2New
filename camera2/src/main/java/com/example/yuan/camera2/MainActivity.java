@@ -347,14 +347,7 @@ public class MainActivity extends AppCompatActivity {
      */
     //endregion
     public Size getOptimalSize(Size[] sizes, int width, int height) {
-        Size size;
-        for (int i = 0; i < sizes.length; i++) {
-            // todo
-            // Log.i(TAG, "getOptimalSize: " + sizes[i].toString());
-        }
-        size = sizes[8];
-        size = sizes[25];
-        return size;
+        return MyCameraUtils.getInstance().getOptimalSize(sizes, width, height);
     }
 
 
