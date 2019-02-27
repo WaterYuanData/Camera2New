@@ -1,7 +1,6 @@
 package com.example.yuan.camera2;
 
 import android.Manifest;
-import android.app.Activity;
 import android.content.Context;
 import android.content.pm.PackageManager;
 import android.graphics.ImageFormat;
@@ -20,6 +19,7 @@ import android.media.ImageReader;
 import android.os.Environment;
 import android.os.Handler;
 import android.os.HandlerThread;
+import android.os.Message;
 import android.support.annotation.NonNull;
 import android.support.v4.app.ActivityCompat;
 import android.support.v7.app.AppCompatActivity;
@@ -42,7 +42,7 @@ import java.util.Comparator;
 
 public class MainActivity extends AppCompatActivity {
 
-    private static final String TAG = "Camera2";
+    private static final String TAG = "CameraActivity";
     private static final int REQUEST_CODE = 500;
     private static File mImageFile;
 
@@ -60,11 +60,15 @@ public class MainActivity extends AppCompatActivity {
     private Integer mSensorOrientation;
     private View.OnClickListener mClickListener;
     private Size mCaptureSize;
-    private HandlerThread mHandlerThread;
-    private Handler mHandler;
+    private HandlerThread mCameraThread;
+    private Handler mCameraHandler;
+
+    private static final int MSG_OPEN_CAMERA = 1;
+    private static final int MSG_CLOSE_CAMERA = 0;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
+        Log.i(TAG, "onCreate: ");
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
 
@@ -74,15 +78,36 @@ public class MainActivity extends AppCompatActivity {
 
     @Override
     protected void onResume() {
+        Log.i(TAG, "onResume: 线程名 " + Thread.currentThread().getName());
         super.onResume();
         mTextureView.setSurfaceTextureListener(mTextureListener);
     }
 
+    @Override
+    protected void onPause() {
+        Log.i(TAG, "onPause: ");
+        super.onPause();
+        mCameraHandler.sendMessage(mCameraHandler.obtainMessage(MSG_CLOSE_CAMERA));
+    }
+
     public void init() {
 
-        mHandlerThread = new HandlerThread("Camera2");
-        mHandlerThread.start();
-        mHandler = new Handler(mHandlerThread.getLooper());
+        mCameraThread = new HandlerThread("Camera2");
+        mCameraThread.start();
+        mCameraHandler = new Handler(mCameraThread.getLooper()) {
+            @Override
+            public void handleMessage(Message msg) {
+                switch (msg.what) {
+                    case MSG_OPEN_CAMERA:
+                        openCamera();
+                        break;
+                    case MSG_CLOSE_CAMERA:
+                        mCameraDevice.close();
+                        break;
+                }
+
+            }
+        };
 
         mClickListener = new View.OnClickListener() {
             @Override
@@ -110,7 +135,7 @@ public class MainActivity extends AppCompatActivity {
                 Log.d(TAG, "onSurfaceTextureAvailable: 当SurefaceTexture可用的时候，设置相机参数并打开相机 width=" + width + " height=" + height);
                 //当SurefaceTexture可用的时候，设置相机参数并打开相机
                 setupCamera(width, height);
-                openCamera();
+                mCameraHandler.sendMessage(mCameraHandler.obtainMessage(MSG_OPEN_CAMERA));
             }
 
             @Override
@@ -133,7 +158,7 @@ public class MainActivity extends AppCompatActivity {
         mStateCallback = new CameraDevice.StateCallback() {
             @Override
             public void onOpened(CameraDevice camera) {
-                Log.d(TAG, "onOpened: 已打开相机,接下来开始预览");
+                Log.d(TAG, "onOpened: 已打开相机,接下来开始预览 线程名 " + Thread.currentThread().getName());
                 mCameraDevice = camera;
                 //开启预览
                 startPreview();
@@ -146,7 +171,14 @@ public class MainActivity extends AppCompatActivity {
 
             @Override
             public void onError(@NonNull CameraDevice camera, int error) {
-                Log.d(TAG, "onError: ");
+                Log.e(TAG, "onError: " + error);
+                camera.close();
+            }
+
+            @Override
+            public void onClosed(@NonNull CameraDevice camera) {
+                Log.i(TAG, "onClosed: ");
+                mCameraDevice = null;
             }
         };
 
@@ -275,10 +307,16 @@ public class MainActivity extends AppCompatActivity {
             //遍历所有摄像头
             for (String cameraId : manager.getCameraIdList()) {
                 CameraCharacteristics characteristics = manager.getCameraCharacteristics(cameraId);
+
+                Log.d(TAG, "setupCamera: 打开相机前 查看相机的参数");
+
                 //默认打开后置摄像头
                 if (characteristics.get(CameraCharacteristics.LENS_FACING) == CameraCharacteristics.LENS_FACING_FRONT) {
                     continue;
                 }
+
+                Integer hardwareLevel = characteristics.get(CameraCharacteristics.INFO_SUPPORTED_HARDWARE_LEVEL);
+                Log.d(TAG, "setupCamera: 相机支持的等级（0是最低级）=" + hardwareLevel);
 
                 mSensorOrientation = characteristics.get(CameraCharacteristics.SENSOR_ORIENTATION);
                 Log.d(TAG, "setupCamera: 方向=" + mSensorOrientation);
@@ -362,8 +400,9 @@ public class MainActivity extends AppCompatActivity {
                 ActivityCompat.requestPermissions(this, new String[]{Manifest.permission.CAMERA, Manifest.permission.WRITE_EXTERNAL_STORAGE}, REQUEST_CODE);
                 return;
             }
+            Log.i(TAG, "openCamera: 线程名 " + Thread.currentThread().getName());
             //打开相机，第一个参数指示打开哪个摄像头，第二个参数stateCallback为相机的状态回调接口，第三个参数用来确定Callback在哪个线程执行，为null的话就在当前线程执行
-            manager.openCamera(mCameraId, mStateCallback, null);
+            manager.openCamera(mCameraId, mStateCallback, mCameraHandler);
         } catch (CameraAccessException e) {
             e.printStackTrace();
         }
@@ -391,7 +430,7 @@ public class MainActivity extends AppCompatActivity {
             mCameraDevice.createCaptureSession(Arrays.asList(mSurface, mImageReader.getSurface()), new CameraCaptureSession.StateCallback() {
                 @Override
                 public void onConfigured(CameraCaptureSession session) {
-                    Log.i(TAG, "onConfigured: 创建createCaptureSession的状态回调");
+                    Log.i(TAG, "onConfigured: 创建createCaptureSession的状态回调 线程名 " + Thread.currentThread().getName());
                     try {
                         //预览请求成功后得到预览会话
                         mPreviewRequest = mPreviewRequestBuilder.build();
@@ -436,9 +475,9 @@ public class MainActivity extends AppCompatActivity {
             public void onImageAvailable(ImageReader reader) {
                 //执行图像保存子线程
                 Log.d(TAG, "onImageAvailable: 执行图像保存子线程");
-                mHandler.post(new imageSaver(reader.acquireNextImage()));
+                mCameraHandler.post(new imageSaver(reader.acquireNextImage()));
             }
-        }, mHandler);
+        }, mCameraHandler);
     }
 
 }
