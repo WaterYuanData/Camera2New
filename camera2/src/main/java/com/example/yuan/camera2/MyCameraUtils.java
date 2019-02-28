@@ -23,9 +23,9 @@ public class MyCameraUtils {
     }
 
     public Size getOptimalSize(Size[] sizes, int width, int height) {
-        Size size = new Size(width, height);
         int max = Math.max(width, height);
         int min = Math.min(width, height);
+        Size size = new Size(max, min);
         float rate = 1.0f * max / min;
         Log.i(TAG, "getOptimalSize: width=" + width);
         Log.i(TAG, "getOptimalSize: height=" + height);

@@ -328,6 +328,9 @@ public class MainActivity extends AppCompatActivity {
                 Log.d(TAG, "setupCamera: mPreviewSize=" + mPreviewSize.toString());
                 mCameraId = cameraId;
 
+                boolean outputSupportedFor = map.isOutputSupportedFor(ImageFormat.YUV_420_888);
+                Log.i(TAG, "setupCamera: 是否支持YUV_420_888 " + outputSupportedFor);
+
                 // Camera2拍照也是通过ImageReader来实现的
                 mCaptureSize = Collections.max(Arrays.asList(map.getOutputSizes(ImageFormat.JPEG)), new Comparator<Size>() {
                     @Override
