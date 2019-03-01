@@ -1,7 +1,9 @@
 package com.example.yuan.camera2;
 
+import android.hardware.camera2.CameraCharacteristics;
 import android.util.Log;
 import android.util.Size;
+import android.view.OrientationEventListener;
 
 import java.util.Arrays;
 import java.util.Collections;
@@ -20,6 +22,24 @@ public class MyCameraUtils {
             mCameraUtils = new MyCameraUtils();
         }
         return mCameraUtils;
+    }
+
+    public int getJpegOrientation(CameraCharacteristics cameraCharacteristics, int deviceOrientation) {
+        int myDeviceOrientation = deviceOrientation;
+        if (myDeviceOrientation == OrientationEventListener.ORIENTATION_UNKNOWN) {
+            return 0;
+        }
+        // Round device orientation to a multiple of 90
+        myDeviceOrientation = (myDeviceOrientation + 45) / 90 * 90;
+        // Reverse device orientation for front-facing cameras
+        Integer lensFacing = cameraCharacteristics.get(CameraCharacteristics.LENS_FACING);
+        if (lensFacing == CameraCharacteristics.LENS_FACING_FRONT) {
+            myDeviceOrientation = -myDeviceOrientation;
+        }
+        Integer sensorOrientation = cameraCharacteristics.get(CameraCharacteristics.SENSOR_ORIENTATION);
+        // Calculate desired JPEG orientation relative to camera orientation to make
+        // the image upright relative to the device orientation
+        return (sensorOrientation + myDeviceOrientation + 360) % 360;
     }
 
     public Size getOptimalSize(Size[] sizes, int width, int height) {

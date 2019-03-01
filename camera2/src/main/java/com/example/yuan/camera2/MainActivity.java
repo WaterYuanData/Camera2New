@@ -27,6 +27,7 @@ import android.os.Bundle;
 import android.util.Log;
 import android.util.Size;
 import android.util.SparseIntArray;
+import android.view.OrientationEventListener;
 import android.view.Surface;
 import android.view.TextureView;
 import android.view.View;
@@ -63,6 +64,9 @@ public class MainActivity extends AppCompatActivity {
     private HandlerThread mCameraThread;
     private Handler mCameraHandler;
 
+    private MyOrientationEventListener myOrientationEventListener;
+    private int mDeviceOrientation;
+
     private static final int MSG_OPEN_CAMERA = 1;
     private static final int MSG_CLOSE_CAMERA = 0;
 
@@ -75,6 +79,35 @@ public class MainActivity extends AppCompatActivity {
         init();
     }
 
+    public class MyOrientationEventListener extends OrientationEventListener {
+        public MyOrientationEventListener(Context context) {
+            super(context);
+        }
+
+        @Override
+        public void onOrientationChanged(int orientation) {
+            if (orientation == OrientationEventListener.ORIENTATION_UNKNOWN) {
+                return;
+            }
+            //保证只返回四个方向
+            int newOrientation = ((orientation + 45) / 90 * 90) % 360;
+            if (newOrientation != mDeviceOrientation) {
+                //返回的mDeviceOrientation就是手机方向，为0°、90°、180°和270°中的一个
+                mDeviceOrientation = newOrientation;
+                Log.i(TAG, "onOrientationChanged: mDeviceOrientation=" + mDeviceOrientation);
+                int rotation = getWindowManager().getDefaultDisplay().getRotation();
+                // todo 在模拟器上不生效吗？一直是0
+                Log.i(TAG, "onOrientationChanged: getWindowManager=" + rotation);
+            }
+            /**
+             * 0<=orientation<45 则 newOrientation=0
+             * 45<=orientation<135 则 newOrientation=90
+             * 135<=orientation<225 则 newOrientation=180
+             * 225<=orientation<315 则 newOrientation=270
+             * 315<=orientation<315 则 newOrientation=0
+             * */
+        }
+    }
 
     @Override
     protected void onResume() {
@@ -91,6 +124,11 @@ public class MainActivity extends AppCompatActivity {
     }
 
     public void init() {
+
+        myOrientationEventListener = new MyOrientationEventListener(getApplicationContext());
+        if (myOrientationEventListener.canDetectOrientation()) {
+            myOrientationEventListener.enable();
+        }
 
         mCameraThread = new HandlerThread("Camera2");
         mCameraThread.start();
@@ -319,7 +357,7 @@ public class MainActivity extends AppCompatActivity {
                 Log.d(TAG, "setupCamera: 相机支持的等级（0是最低级）=" + hardwareLevel);
 
                 mSensorOrientation = characteristics.get(CameraCharacteristics.SENSOR_ORIENTATION);
-                Log.d(TAG, "setupCamera: 方向=" + mSensorOrientation);
+                Log.d(TAG, "setupCamera: 相机的传感器方向=" + mSensorOrientation);
 
                 //获取StreamConfigurationMap，它是管理摄像头支持的所有输出格式和尺寸
                 StreamConfigurationMap map = characteristics.get(CameraCharacteristics.SCALER_STREAM_CONFIGURATION_MAP);
