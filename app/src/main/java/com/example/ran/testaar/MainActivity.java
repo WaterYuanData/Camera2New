@@ -1,5 +1,6 @@
 package com.example.ran.testaar;
 
+import android.app.Activity;
 import android.content.Intent;
 import android.net.Uri;
 import android.os.storage.StorageManager;
@@ -7,7 +8,9 @@ import android.os.storage.StorageVolume;
 import android.support.v7.app.AppCompatActivity;
 import android.os.Bundle;
 import android.util.Log;
+import android.view.Surface;
 import android.view.View;
+import android.widget.Toast;
 
 import com.cloudminds.storage.DocumentsUtils;
 
@@ -28,8 +31,29 @@ public class MainActivity extends AppCompatActivity {
             @Override
             public void onClick(View v) {
                 test();
+                testOrientation();
             }
         });
+    }
+
+    public void testOrientation() {
+        getDisplayRotation(this);
+    }
+
+    public static int getDisplayRotation(Activity activity) {
+        int rotation = activity.getWindowManager().getDefaultDisplay().getRotation();
+        Log.d(TAG, "getDisplayRotation: 显示方向 " + rotation);
+        switch (rotation) {
+            case Surface.ROTATION_0:
+                return 0;
+            case Surface.ROTATION_90:
+                return 90;
+            case Surface.ROTATION_180:
+                return 180;
+            case Surface.ROTATION_270:
+                return 270;
+        }
+        return 0;
     }
 
     public void test() {
@@ -46,6 +70,12 @@ public class MainActivity extends AppCompatActivity {
             startActivityForResult(intent, DocumentsUtils.OPEN_DOCUMENT_TREE_CODE);
             return;
         }
+
+        long sdAvailableSpace = DocumentsUtils.getSDAvailableSpace() / 1024 / 1024;
+        Toast.makeText(getApplicationContext(), "" + sdAvailableSpace, Toast.LENGTH_SHORT).show();
+        Log.i(TAG, "test: sdAvailableSpace=" + sdAvailableSpace);
+
+        Log.i(TAG, "test: canWrite=" + new File(DocumentsUtils.getSdRootPath()).canWrite());
 
         String sdRootPath = DocumentsUtils.getSdRootPath();
         String s1 = sdRootPath + "/test/1";
