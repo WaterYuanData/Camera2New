@@ -45,7 +45,6 @@ public class MainActivity extends AppCompatActivity {
 
     private static final String TAG = "CameraActivity";
     private static final int REQUEST_CODE = 500;
-    private static File mImageFile;
 
     private TextureView mTextureView;
     private TextureView.SurfaceTextureListener mTextureListener;
@@ -58,13 +57,9 @@ public class MainActivity extends AppCompatActivity {
     private ImageReader mImageReader;
     private Size mPreviewSize;
     private CameraCaptureSession.CaptureCallback mSessionCaptureCallback;
-    private Integer mSensorOrientation;
-    private View.OnClickListener mClickListener;
     private Size mCaptureSize;
-    private HandlerThread mCameraThread;
     private Handler mCameraHandler;
 
-    private MyOrientationEventListener myOrientationEventListener;
     private int mDeviceOrientation;
 
     private static final int MSG_OPEN_CAMERA = 1;
@@ -81,7 +76,7 @@ public class MainActivity extends AppCompatActivity {
     }
 
     public class MyOrientationEventListener extends OrientationEventListener {
-        public MyOrientationEventListener(Context context) {
+        MyOrientationEventListener(Context context) {
             super(context);
         }
 
@@ -100,13 +95,13 @@ public class MainActivity extends AppCompatActivity {
                 // todo 在模拟器上不生效吗？一直是0
                 Log.i(TAG, "onOrientationChanged: 窗口方向 getWindowManager=" + rotation);
             }
-            /**
-             * 0<=orientation<45 则 newOrientation=0
-             * 45<=orientation<135 则 newOrientation=90
-             * 135<=orientation<225 则 newOrientation=180
-             * 225<=orientation<315 则 newOrientation=270
-             * 315<=orientation<315 则 newOrientation=0
-             * */
+            /*
+              0<=orientation<45 则 newOrientation=0
+              45<=orientation<135 则 newOrientation=90
+              135<=orientation<225 则 newOrientation=180
+              225<=orientation<315 则 newOrientation=270
+              315<=orientation<315 则 newOrientation=0
+              */
         }
     }
 
@@ -126,14 +121,14 @@ public class MainActivity extends AppCompatActivity {
 
     public void init() {
 
-        myOrientationEventListener = new MyOrientationEventListener(getApplicationContext());
+        MyOrientationEventListener myOrientationEventListener = new MyOrientationEventListener(getApplicationContext());
         if (myOrientationEventListener.canDetectOrientation()) {
             myOrientationEventListener.enable();
         }
 
-        mCameraThread = new HandlerThread("Camera2");
-        mCameraThread.start();
-        mCameraHandler = new Handler(mCameraThread.getLooper()) {
+        HandlerThread cameraThread = new HandlerThread("Camera2");
+        cameraThread.start();
+        mCameraHandler = new Handler(cameraThread.getLooper()) {
             @Override
             public void handleMessage(Message msg) {
                 switch (msg.what) {
@@ -152,7 +147,7 @@ public class MainActivity extends AppCompatActivity {
             }
         };
 
-        mClickListener = new View.OnClickListener() {
+        View.OnClickListener clickListener = new View.OnClickListener() {
             @Override
             public void onClick(View v) {
                 switch (v.getId()) {
@@ -169,8 +164,8 @@ public class MainActivity extends AppCompatActivity {
         };
 
         mTextureView = findViewById(R.id.textureView);
-        findViewById(R.id.button).setOnClickListener(mClickListener);
-        findViewById(R.id.button2).setOnClickListener(mClickListener);
+        findViewById(R.id.button).setOnClickListener(clickListener);
+        findViewById(R.id.button2).setOnClickListener(clickListener);
 
         mTextureListener = new TextureView.SurfaceTextureListener() {
             @Override
@@ -200,7 +195,7 @@ public class MainActivity extends AppCompatActivity {
 
         mStateCallback = new CameraDevice.StateCallback() {
             @Override
-            public void onOpened(CameraDevice camera) {
+            public void onOpened(@NonNull CameraDevice camera) {
                 Log.d(TAG, "onOpened: 已打开相机,接下来开始预览 线程名 " + Thread.currentThread().getName());
                 mCameraDevice = camera;
                 //开启预览
@@ -228,7 +223,7 @@ public class MainActivity extends AppCompatActivity {
         mSessionCaptureCallback = new CameraCaptureSession.CaptureCallback() {
             // todo
             @Override
-            public void onCaptureCompleted(CameraCaptureSession session, CaptureRequest request, TotalCaptureResult result) {
+            public void onCaptureCompleted(@NonNull CameraCaptureSession session, @NonNull CaptureRequest request, @NonNull TotalCaptureResult result) {
                 // Log.d(TAG, "onCaptureCompleted: 完成 会一直打印");
             }
 
@@ -242,11 +237,11 @@ public class MainActivity extends AppCompatActivity {
     private static final SparseIntArray ORIENTATION = new SparseIntArray();
 
 
-    /**
-     * 屏幕方向=0 拍照方向=90
-     * 屏幕方向=1 拍照方向=0
-     * 屏幕方向=3 拍照方向=180
-     * */
+    /*
+      屏幕方向=0 拍照方向=90
+      屏幕方向=1 拍照方向=0
+      屏幕方向=3 拍照方向=180
+      */
     static {
         ORIENTATION.append(Surface.ROTATION_0, 90);
         ORIENTATION.append(Surface.ROTATION_90, 0);
@@ -260,7 +255,7 @@ public class MainActivity extends AppCompatActivity {
         private Image mImage;
         private Handler mCameraHandler;
 
-        public ImageSaverTask(Image image, Handler handler) {
+        ImageSaverTask(Image image, Handler handler) {
             mImage = image;
             mCameraHandler = handler;
         }
@@ -273,24 +268,22 @@ public class MainActivity extends AppCompatActivity {
             byte[] data = new byte[buffer.remaining()];
             buffer.get(data);
             new File(Environment.getExternalStorageDirectory() + "/DCIM/").mkdirs();
-            mImageFile = new File(Environment.getExternalStorageDirectory() + "/DCIM/Pic_" + System.currentTimeMillis() + ".jpg");
+            File imageFile = new File(Environment.getExternalStorageDirectory() + "/DCIM/Pic_" + System.currentTimeMillis() + ".jpg");
             try {
-                Log.d(TAG, "run: mImageFile=" + mImageFile.getCanonicalPath());
+                Log.d(TAG, "run: mImageFile=" + imageFile.getCanonicalPath());
             } catch (IOException e) {
                 e.printStackTrace();
             }
             FileOutputStream fos = null;
             try {
-                fos = new FileOutputStream(mImageFile);
+                fos = new FileOutputStream(imageFile);
                 fos.write(data, 0, data.length);
             } catch (IOException e) {
                 e.printStackTrace();
             } finally {
-                mImageFile = null;
                 if (fos != null) {
                     try {
                         fos.close();
-                        fos = null;
                     } catch (IOException e) {
                         e.printStackTrace();
                     }
@@ -318,7 +311,7 @@ public class MainActivity extends AppCompatActivity {
             //这个回调接口用于拍照结束时重启预览，因为拍照会导致预览停止
             CameraCaptureSession.CaptureCallback mImageSavedCallback = new CameraCaptureSession.CaptureCallback() {
                 @Override
-                public void onCaptureCompleted(CameraCaptureSession session, CaptureRequest request, TotalCaptureResult result) {
+                public void onCaptureCompleted(@NonNull CameraCaptureSession session, @NonNull CaptureRequest request, @NonNull TotalCaptureResult result) {
                     Toast.makeText(getApplicationContext(), "拍照已完成", Toast.LENGTH_SHORT).show();
                     Log.d(TAG, "onCaptureCompleted: 拍照已完成");
                     //重启预览
@@ -338,6 +331,7 @@ public class MainActivity extends AppCompatActivity {
      * https://www.cnblogs.com/renhui/p/8718758.html
      * 5、实现PreviewCallback
      */
+    @SuppressWarnings("unused")
     public void beforeStartPreview() {
         setupImageReader();
 
@@ -357,25 +351,28 @@ public class MainActivity extends AppCompatActivity {
         CameraManager manager = (CameraManager) getSystemService(Context.CAMERA_SERVICE);
         try {
             //遍历所有摄像头
+            assert manager != null;
             for (String cameraId : manager.getCameraIdList()) {
                 CameraCharacteristics characteristics = manager.getCameraCharacteristics(cameraId);
 
                 Log.d(TAG, "setupCamera: 打开相机前 查看相机的参数");
 
                 //默认打开后置摄像头
-                if (characteristics.get(CameraCharacteristics.LENS_FACING) == CameraCharacteristics.LENS_FACING_FRONT) {
+                Integer lensFacing = characteristics.get(CameraCharacteristics.LENS_FACING);
+                if (lensFacing != null && lensFacing == CameraCharacteristics.LENS_FACING_FRONT) {
                     continue;
                 }
 
                 Integer hardwareLevel = characteristics.get(CameraCharacteristics.INFO_SUPPORTED_HARDWARE_LEVEL);
                 Log.d(TAG, "setupCamera: 相机支持的等级（0是最低级）=" + hardwareLevel);
 
-                mSensorOrientation = characteristics.get(CameraCharacteristics.SENSOR_ORIENTATION);
-                Log.d(TAG, "setupCamera: 相机的传感器方向=" + mSensorOrientation);
+                Integer sensorOrientation = characteristics.get(CameraCharacteristics.SENSOR_ORIENTATION);
+                Log.d(TAG, "setupCamera: 相机的传感器方向=" + sensorOrientation);
 
                 //获取StreamConfigurationMap，它是管理摄像头支持的所有输出格式和尺寸
                 StreamConfigurationMap map = characteristics.get(CameraCharacteristics.SCALER_STREAM_CONFIGURATION_MAP);
                 //根据TextureView的尺寸设置预览尺寸
+                assert map != null;
                 mPreviewSize = getOptimalSize(map.getOutputSizes(SurfaceTexture.class), width, height);
                 Log.d(TAG, "setupCamera: mPreviewSize=" + mPreviewSize.toString());
                 mCameraId = cameraId;
