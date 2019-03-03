@@ -69,6 +69,7 @@ public class MainActivity extends AppCompatActivity {
 
     private static final int MSG_OPEN_CAMERA = 1;
     private static final int MSG_CLOSE_CAMERA = 0;
+    private static final int MSG_PICTURE_SAVED = 10;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -94,10 +95,10 @@ public class MainActivity extends AppCompatActivity {
             if (newOrientation != mDeviceOrientation) {
                 //返回的mDeviceOrientation就是手机方向，为0°、90°、180°和270°中的一个
                 mDeviceOrientation = newOrientation;
-                Log.i(TAG, "onOrientationChanged: mDeviceOrientation=" + mDeviceOrientation);
+                Log.i(TAG, "onOrientationChanged: 设备方向 mDeviceOrientation=" + mDeviceOrientation);
                 int rotation = getWindowManager().getDefaultDisplay().getRotation();
                 // todo 在模拟器上不生效吗？一直是0
-                Log.i(TAG, "onOrientationChanged: getWindowManager=" + rotation);
+                Log.i(TAG, "onOrientationChanged: 窗口方向 getWindowManager=" + rotation);
             }
             /**
              * 0<=orientation<45 则 newOrientation=0
@@ -141,6 +142,10 @@ public class MainActivity extends AppCompatActivity {
                         break;
                     case MSG_CLOSE_CAMERA:
                         mCameraDevice.close();
+                        break;
+                    case MSG_PICTURE_SAVED:
+                        Log.i(TAG, "handleMessage: 照片已保存");
+                        // todo 是否需要关闭 拍照的mImageReader 如果需要则先调整其初始化的位置
                         break;
                 }
 
@@ -251,15 +256,19 @@ public class MainActivity extends AppCompatActivity {
 
 
     // 创建保存图片的线程
-    public static class imageSaver implements Runnable {
+    public static class ImageSaverTask implements Runnable {
         private Image mImage;
+        private Handler mCameraHandler;
 
-        public imageSaver(Image image) {
+        public ImageSaverTask(Image image, Handler handler) {
             mImage = image;
+            mCameraHandler = handler;
         }
 
         @Override
         public void run() {
+            Log.i(TAG, "run: 执行保存照片子线程 线程名 " + Thread.currentThread().getName());
+            Log.i(TAG, "run: 执行保存照片子线程 " + mImage.toString());
             ByteBuffer buffer = mImage.getPlanes()[0].getBuffer();
             byte[] data = new byte[buffer.remaining()];
             buffer.get(data);
@@ -286,6 +295,11 @@ public class MainActivity extends AppCompatActivity {
                         e.printStackTrace();
                     }
                 }
+                if (mImage != null) {
+                    mImage.close();
+                    mImage = null;
+                }
+                mCameraHandler.sendMessage(mCameraHandler.obtainMessage(MainActivity.MSG_PICTURE_SAVED));
             }
         }
     }
@@ -293,26 +307,26 @@ public class MainActivity extends AppCompatActivity {
     private void capture() {
         try {
             //首先我们创建请求拍照的CaptureRequest
-            final CaptureRequest.Builder mCaptureBuilder = mCameraDevice.createCaptureRequest(CameraDevice.TEMPLATE_STILL_CAPTURE);
+            CaptureRequest.Builder mCaptureBuilder = mCameraDevice.createCaptureRequest(CameraDevice.TEMPLATE_STILL_CAPTURE);
             //获取屏幕方向
             int rotation = getWindowManager().getDefaultDisplay().getRotation();
             //设置CaptureRequest输出到mImageReader
             mCaptureBuilder.addTarget(mImageReader.getSurface());
             //设置拍照方向
             mCaptureBuilder.set(CaptureRequest.JPEG_ORIENTATION, ORIENTATION.get(rotation));
-            Log.d(TAG, "capture: 屏幕方向=" + rotation + " 拍照方向=" + ORIENTATION.get(rotation));
+            Log.d(TAG, "capture: 窗口方向=" + rotation + " 修正后的拍照方向=" + ORIENTATION.get(rotation));
             //这个回调接口用于拍照结束时重启预览，因为拍照会导致预览停止
             CameraCaptureSession.CaptureCallback mImageSavedCallback = new CameraCaptureSession.CaptureCallback() {
                 @Override
                 public void onCaptureCompleted(CameraCaptureSession session, CaptureRequest request, TotalCaptureResult result) {
-                    Toast.makeText(getApplicationContext(), "已保存", Toast.LENGTH_SHORT).show();
-                    Log.d(TAG, "onCaptureCompleted: 已保存");
+                    Toast.makeText(getApplicationContext(), "拍照已完成", Toast.LENGTH_SHORT).show();
+                    Log.d(TAG, "onCaptureCompleted: 拍照已完成");
                     //重启预览
-                    startPreview();
+//                    startPreview();
                 }
             };
             //停止预览
-            mPreviewSession.stopRepeating();
+//            mPreviewSession.stopRepeating();****************拍照不需要关闭预览
             //开始拍照，然后回调上面的接口重启预览，因为mCaptureBuilder设置ImageReader作为target，所以会自动回调ImageReader的onImageAvailable()方法保存图片
             mPreviewSession.capture(mCaptureBuilder.build(), mImageSavedCallback, null);
         } catch (CameraAccessException e) {
@@ -443,6 +457,7 @@ public class MainActivity extends AppCompatActivity {
             }
             Log.i(TAG, "openCamera: 线程名 " + Thread.currentThread().getName());
             //打开相机，第一个参数指示打开哪个摄像头，第二个参数stateCallback为相机的状态回调接口，第三个参数用来确定Callback在哪个线程执行，为null的话就在当前线程执行
+            assert manager != null;
             manager.openCamera(mCameraId, mStateCallback, mCameraHandler);
         } catch (CameraAccessException e) {
             e.printStackTrace();
@@ -470,7 +485,7 @@ public class MainActivity extends AppCompatActivity {
             //创建预览会话，第一个参数是捕获数据的输出Surface列表，第二个参数是CameraCaptureSession的状态回调接口，当它创建好后会回调onConfigured方法，第三个参数用来确定Callback在哪个线程执行，为null的话就在当前线程执行
             mCameraDevice.createCaptureSession(Arrays.asList(mSurface, mImageReader.getSurface()), new CameraCaptureSession.StateCallback() {
                 @Override
-                public void onConfigured(CameraCaptureSession session) {
+                public void onConfigured(@NonNull CameraCaptureSession session) {
                     Log.i(TAG, "onConfigured: 创建createCaptureSession的状态回调 线程名 " + Thread.currentThread().getName());
                     try {
                         //预览请求成功后得到预览会话
@@ -484,7 +499,7 @@ public class MainActivity extends AppCompatActivity {
                 }
 
                 @Override
-                public void onConfigureFailed(CameraCaptureSession session) {
+                public void onConfigureFailed(@NonNull CameraCaptureSession session) {
 
                 }
             }, null);
@@ -515,8 +530,11 @@ public class MainActivity extends AppCompatActivity {
             @Override
             public void onImageAvailable(ImageReader reader) {
                 //执行图像保存子线程
-                Log.d(TAG, "onImageAvailable: 执行图像保存子线程");
-                mCameraHandler.post(new imageSaver(reader.acquireNextImage()));
+                Log.d(TAG, "onImageAvailable: 调用保存照片子线程");
+                Image nextImage = reader.acquireNextImage();
+                Log.i(TAG, "onImageAvailable: " + nextImage.toString());
+                mCameraHandler.post(new ImageSaverTask(nextImage, mCameraHandler));
+//                reader.close(); reader必须在子线程结束后才能关闭，因为reader的关闭会使关闭nextImage，而通过引用传递到子线程中的mImage也会立即关闭
             }
         }, mCameraHandler);
     }
