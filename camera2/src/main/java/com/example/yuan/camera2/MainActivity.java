@@ -3,7 +3,10 @@ package com.example.yuan.camera2;
 import android.Manifest;
 import android.content.Context;
 import android.content.pm.PackageManager;
+import android.graphics.Bitmap;
+import android.graphics.BitmapFactory;
 import android.graphics.ImageFormat;
+import android.graphics.Matrix;
 import android.graphics.SurfaceTexture;
 import android.hardware.camera2.CameraAccessException;
 import android.hardware.camera2.CameraCaptureSession;
@@ -14,8 +17,10 @@ import android.hardware.camera2.CaptureRequest;
 import android.hardware.camera2.CaptureResult;
 import android.hardware.camera2.TotalCaptureResult;
 import android.hardware.camera2.params.StreamConfigurationMap;
+import android.media.ExifInterface;
 import android.media.Image;
 import android.media.ImageReader;
+import android.os.Build;
 import android.os.Environment;
 import android.os.Handler;
 import android.os.HandlerThread;
@@ -31,6 +36,7 @@ import android.view.OrientationEventListener;
 import android.view.Surface;
 import android.view.TextureView;
 import android.view.View;
+import android.widget.ImageView;
 import android.widget.Toast;
 
 import java.io.File;
@@ -60,15 +66,19 @@ public class MainActivity extends AppCompatActivity {
     private CaptureRequest.Builder mPreviewRequestBuilder;
     private CaptureRequest mPreviewRequest;
     private CameraCaptureSession mPreviewSession;
+    private TextureView mPreviewTextureView2;
 
     // 拍照
     private ImageReader mImageReader;
     private Size mCaptureSize;
+    private static File mImageFile;
 
     private Handler mCameraHandler;
     private static final int MSG_OPEN_CAMERA = 1;
     private static final int MSG_CLOSE_CAMERA = 0;
     private static final int MSG_PICTURE_SAVED = 10;
+    private static final int MSG_PREVIEW_STARTED = 2;
+    private ImageView mThumbnail;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -140,11 +150,23 @@ public class MainActivity extends AppCompatActivity {
                         openCamera();
                         break;
                     case MSG_CLOSE_CAMERA:
-                        mCameraDevice.close();
+                        if (mCameraDevice != null) {
+                            mCameraDevice.close();
+                        }
                         break;
                     case MSG_PICTURE_SAVED:
                         Log.i(TAG, "handleMessage: 照片已保存");
                         // todo 是否需要关闭 拍照的mImageReader 如果需要则先调整其初始化的位置
+                        final Bitmap thumbnail = getThumbnail(mImageFile.toString());
+                        runOnUiThread(new Runnable() {
+                            @Override
+                            public void run() {
+                                mThumbnail.setImageBitmap(thumbnail);
+                            }
+                        });
+                        break;
+                    case MSG_PREVIEW_STARTED:
+                        Log.i(TAG, "handleMessage: 预览已开启");
                         break;
                 }
 
@@ -170,6 +192,8 @@ public class MainActivity extends AppCompatActivity {
         mPreviewTextureView = findViewById(R.id.textureView);
         findViewById(R.id.button).setOnClickListener(clickListener);
         findViewById(R.id.button2).setOnClickListener(clickListener);
+        mThumbnail = findViewById(R.id.imageView);
+        mPreviewTextureView2 = findViewById(R.id.textureView2);
 
         mTextureListener = new TextureView.SurfaceTextureListener() {
             @Override
@@ -272,15 +296,15 @@ public class MainActivity extends AppCompatActivity {
             byte[] data = new byte[buffer.remaining()];
             buffer.get(data);
             new File(Environment.getExternalStorageDirectory() + "/DCIM/").mkdirs();
-            File imageFile = new File(Environment.getExternalStorageDirectory() + "/DCIM/Pic_" + System.currentTimeMillis() + ".jpg");
+            mImageFile = new File(Environment.getExternalStorageDirectory() + "/DCIM/Pic_" + System.currentTimeMillis() + ".jpg");
             try {
-                Log.d(TAG, "run: mImageFile=" + imageFile.getCanonicalPath());
+                Log.d(TAG, "run: mImageFile=" + mImageFile.getCanonicalPath());
             } catch (IOException e) {
                 e.printStackTrace();
             }
             FileOutputStream fos = null;
             try {
-                fos = new FileOutputStream(imageFile);
+                fos = new FileOutputStream(mImageFile);
                 fos.write(data, 0, data.length);
             } catch (IOException e) {
                 e.printStackTrace();
@@ -327,7 +351,7 @@ public class MainActivity extends AppCompatActivity {
             //停止预览
 //            mPreviewSession.stopRepeating();****************拍照不需要关闭预览
             //开始拍照，然后回调上面的接口重启预览，因为mCaptureBuilder设置ImageReader作为target，所以会自动回调ImageReader的onImageAvailable()方法保存图片
-            mPreviewSession.capture(mCaptureBuilder.build(), mImageSavedCallback, null);
+            mPreviewSession.capture(mCaptureBuilder.build(), mImageSavedCallback, mCameraHandler);
         } catch (CameraAccessException e) {
             e.printStackTrace();
         }
@@ -386,6 +410,8 @@ public class MainActivity extends AppCompatActivity {
                 boolean outputSupportedFor = map.isOutputSupportedFor(ImageFormat.YUV_420_888);
                 Log.i(TAG, "setupCamera: 是否支持YUV_420_888 " + outputSupportedFor);
 
+                Size[] sizes = characteristics.get(CameraCharacteristics.JPEG_AVAILABLE_THUMBNAIL_SIZES);
+
                 // Camera2拍照也是通过ImageReader来实现的
                 mCaptureSize = Collections.max(Arrays.asList(map.getOutputSizes(ImageFormat.JPEG)), new Comparator<Size>() {
                     @Override
@@ -402,6 +428,48 @@ public class MainActivity extends AppCompatActivity {
         }
     }
 
+    public Bitmap getThumbnail(String jpegPath) {
+        Bitmap thumbnailBitmap = null;
+        try {
+            ExifInterface exifInterface = new ExifInterface(jpegPath);
+            int orientationInt = exifInterface.getAttributeInt(ExifInterface.TAG_ORIENTATION, ExifInterface.ORIENTATION_NORMAL);
+            float orientationFloat = 0.0f;
+            switch (orientationInt) {
+                case ExifInterface.ORIENTATION_NORMAL:
+                    orientationFloat = 0.0f;
+                    break;
+                case ExifInterface.ORIENTATION_ROTATE_90:
+                    orientationFloat = 90.0f;
+                    break;
+                case ExifInterface.ORIENTATION_ROTATE_180:
+                    orientationFloat = 180.0f;
+                    break;
+                case ExifInterface.ORIENTATION_ROTATE_270:
+                    orientationFloat = 270.0f;
+                    break;
+            }
+            // 假设图片在 Exif 写入缩略图
+            if (exifInterface.hasThumbnail()) {
+                Log.d(TAG, "getThumbnail: ");
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                    thumbnailBitmap = exifInterface.getThumbnailBitmap();
+                }
+            }
+//            byte[] thumbnail = exifInterface.getThumbnail();区别
+            // 假设未写入
+            BitmapFactory.Options options = new BitmapFactory.Options();
+            options.inSampleSize = 16;
+            thumbnailBitmap = BitmapFactory.decodeFile(jpegPath, options);
+            if (orientationFloat != 0.0f && thumbnailBitmap != null) {
+                Matrix matrix = new Matrix();
+                matrix.setRotate(orientationFloat);
+                thumbnailBitmap = Bitmap.createBitmap(thumbnailBitmap, 0, 0, thumbnailBitmap.getWidth(), thumbnailBitmap.getHeight(), matrix, true);
+            }
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+        return thumbnailBitmap;
+    }
 
     //region getOptimalSize
 
@@ -476,17 +544,24 @@ public class MainActivity extends AppCompatActivity {
         mSurfaceTexture.setDefaultBufferSize(mPreviewSize.getWidth(), mPreviewSize.getHeight());
         //获取Surface显示预览数据
         mPreviewSurface = new Surface(mSurfaceTexture);
+
+        SurfaceTexture surfaceTexture = mPreviewTextureView2.getSurfaceTexture();
+        surfaceTexture.setDefaultBufferSize(mPreviewSize.getWidth(), mPreviewSize.getHeight());
+        Surface surface = new Surface(surfaceTexture);
+
         try {
             //创建请求的Builder，TEMPLATE_PREVIEW表示预览请求
             mPreviewRequestBuilder = mCameraDevice.createCaptureRequest(CameraDevice.TEMPLATE_PREVIEW);
             //设置Surface作为预览数据的显示界面
             mPreviewRequestBuilder.addTarget(mPreviewSurface);
 
+            mPreviewRequestBuilder.addTarget(surface);
+
             // 调整方向
             // mCaptureRequestBuilder.set();
 
             //创建预览会话，第一个参数是捕获数据的输出Surface列表，第二个参数是CameraCaptureSession的状态回调接口，当它创建好后会回调onConfigured方法，第三个参数用来确定Callback在哪个线程执行，为null的话就在当前线程执行
-            mCameraDevice.createCaptureSession(Arrays.asList(mPreviewSurface, mImageReader.getSurface()), new CameraCaptureSession.StateCallback() {
+            mCameraDevice.createCaptureSession(Arrays.asList(mPreviewSurface, mImageReader.getSurface(),surface), new CameraCaptureSession.StateCallback() {
                 @Override
                 public void onConfigured(@NonNull CameraCaptureSession session) {
                     Log.i(TAG, "onConfigured: 创建createCaptureSession的状态回调 线程名 " + Thread.currentThread().getName());
@@ -495,7 +570,8 @@ public class MainActivity extends AppCompatActivity {
                         mPreviewRequest = mPreviewRequestBuilder.build();
                         mPreviewSession = session;
                         //设置反复捕获数据的请求，这样预览界面就会一直有数据显示
-                        mPreviewSession.setRepeatingRequest(mPreviewRequest, mSessionCaptureCallback, null);
+                        mPreviewSession.setRepeatingRequest(mPreviewRequest, mSessionCaptureCallback, mCameraHandler);
+                        mCameraHandler.sendMessage(mCameraHandler.obtainMessage(MainActivity.MSG_PREVIEW_STARTED));
                     } catch (CameraAccessException e) {
                         e.printStackTrace();
                     }
@@ -505,7 +581,7 @@ public class MainActivity extends AppCompatActivity {
                 public void onConfigureFailed(@NonNull CameraCaptureSession session) {
 
                 }
-            }, null);
+            }, mCameraHandler);
         } catch (CameraAccessException e) {
             e.printStackTrace();
         }
