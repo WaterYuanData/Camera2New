@@ -411,6 +411,9 @@ public class MainActivity extends AppCompatActivity {
                 Log.i(TAG, "setupCamera: 是否支持YUV_420_888 " + outputSupportedFor);
 
                 Size[] sizes = characteristics.get(CameraCharacteristics.JPEG_AVAILABLE_THUMBNAIL_SIZES);
+                for (int i = 0; i < sizes.length; i++) {
+                    Log.d(TAG, "setupCamera: 缩略图尺寸 " + sizes[i]);
+                }
 
                 // Camera2拍照也是通过ImageReader来实现的
                 mCaptureSize = Collections.max(Arrays.asList(map.getOutputSizes(ImageFormat.JPEG)), new Comparator<Size>() {
