@@ -46,22 +46,26 @@ public class MainActivity extends AppCompatActivity {
     private static final String TAG = "CameraActivity";
     private static final int REQUEST_CODE = 500;
 
-    private TextureView mTextureView;
-    private TextureView.SurfaceTextureListener mTextureListener;
     private String mCameraId;
-    private CameraDevice.StateCallback mStateCallback;
     private CameraDevice mCameraDevice;
+    private CameraDevice.StateCallback mStateCallback;
+    private CameraCaptureSession.CaptureCallback mSessionCaptureCallback;
+    private int mDeviceOrientation;
+
+    // 预览
+    private TextureView mPreviewTextureView;
+    private TextureView.SurfaceTextureListener mTextureListener;
+    private Size mPreviewSize;
+    private Surface mPreviewSurface;
     private CaptureRequest.Builder mPreviewRequestBuilder;
     private CaptureRequest mPreviewRequest;
     private CameraCaptureSession mPreviewSession;
+
+    // 拍照
     private ImageReader mImageReader;
-    private Size mPreviewSize;
-    private CameraCaptureSession.CaptureCallback mSessionCaptureCallback;
     private Size mCaptureSize;
+
     private Handler mCameraHandler;
-
-    private int mDeviceOrientation;
-
     private static final int MSG_OPEN_CAMERA = 1;
     private static final int MSG_CLOSE_CAMERA = 0;
     private static final int MSG_PICTURE_SAVED = 10;
@@ -109,7 +113,7 @@ public class MainActivity extends AppCompatActivity {
     protected void onResume() {
         Log.i(TAG, "onResume: 线程名 " + Thread.currentThread().getName());
         super.onResume();
-        mTextureView.setSurfaceTextureListener(mTextureListener);
+        mPreviewTextureView.setSurfaceTextureListener(mTextureListener);
     }
 
     @Override
@@ -163,7 +167,7 @@ public class MainActivity extends AppCompatActivity {
             }
         };
 
-        mTextureView = findViewById(R.id.textureView);
+        mPreviewTextureView = findViewById(R.id.textureView);
         findViewById(R.id.button).setOnClickListener(clickListener);
         findViewById(R.id.button2).setOnClickListener(clickListener);
 
@@ -305,6 +309,8 @@ public class MainActivity extends AppCompatActivity {
             int rotation = getWindowManager().getDefaultDisplay().getRotation();
             //设置CaptureRequest输出到mImageReader
             mCaptureBuilder.addTarget(mImageReader.getSurface());
+            //将本次capture也输出到预览的surface上，避免卡顿 todo 然而效果不明显
+            mCaptureBuilder.addTarget(mPreviewSurface);
             //设置拍照方向
             mCaptureBuilder.set(CaptureRequest.JPEG_ORIENTATION, ORIENTATION.get(rotation));
             Log.d(TAG, "capture: 窗口方向=" + rotation + " 修正后的拍照方向=" + ORIENTATION.get(rotation));
@@ -465,22 +471,22 @@ public class MainActivity extends AppCompatActivity {
 
         setupImageReader();
 
-        SurfaceTexture mSurfaceTexture = mTextureView.getSurfaceTexture();
+        SurfaceTexture mSurfaceTexture = mPreviewTextureView.getSurfaceTexture();
         //设置TextureView的缓冲区大小
         mSurfaceTexture.setDefaultBufferSize(mPreviewSize.getWidth(), mPreviewSize.getHeight());
         //获取Surface显示预览数据
-        Surface mSurface = new Surface(mSurfaceTexture);
+        mPreviewSurface = new Surface(mSurfaceTexture);
         try {
             //创建请求的Builder，TEMPLATE_PREVIEW表示预览请求
             mPreviewRequestBuilder = mCameraDevice.createCaptureRequest(CameraDevice.TEMPLATE_PREVIEW);
             //设置Surface作为预览数据的显示界面
-            mPreviewRequestBuilder.addTarget(mSurface);
+            mPreviewRequestBuilder.addTarget(mPreviewSurface);
 
             // 调整方向
             // mCaptureRequestBuilder.set();
 
             //创建预览会话，第一个参数是捕获数据的输出Surface列表，第二个参数是CameraCaptureSession的状态回调接口，当它创建好后会回调onConfigured方法，第三个参数用来确定Callback在哪个线程执行，为null的话就在当前线程执行
-            mCameraDevice.createCaptureSession(Arrays.asList(mSurface, mImageReader.getSurface()), new CameraCaptureSession.StateCallback() {
+            mCameraDevice.createCaptureSession(Arrays.asList(mPreviewSurface, mImageReader.getSurface()), new CameraCaptureSession.StateCallback() {
                 @Override
                 public void onConfigured(@NonNull CameraCaptureSession session) {
                     Log.i(TAG, "onConfigured: 创建createCaptureSession的状态回调 线程名 " + Thread.currentThread().getName());
