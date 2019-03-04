@@ -55,10 +55,9 @@ public class MainActivity extends AppCompatActivity {
     private String mCameraId;
     private CameraDevice mCameraDevice;
     private CameraDevice.StateCallback mStateCallback;
-    private CameraCaptureSession.CaptureCallback mSessionCaptureCallback;
+    private CameraCaptureSession mCaptureSession;
     private int mDeviceOrientation;
     private boolean mPause = false;
-    private int mCaptureCount = 0;
 
     // 预览
     private TextureView mPreviewTextureView;
@@ -67,7 +66,9 @@ public class MainActivity extends AppCompatActivity {
     private Surface mPreviewSurface;
     private CaptureRequest.Builder mPreviewRequestBuilder;
     private CaptureRequest mPreviewRequest;
-    private CameraCaptureSession mPreviewSession;
+    private CameraCaptureSession.CaptureCallback mPreviewCaptureCallback;
+    private int mRepeatCaptureCount = 0;
+    // 多预览
     private TextureView mPreviewTextureView2;
 
     // 拍照
@@ -87,6 +88,10 @@ public class MainActivity extends AppCompatActivity {
         Log.i(TAG, "onCreate: ");
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
+
+        // 隐藏状态栏
+//        getWindow().setFlags(WindowManager.LayoutParams.FLAG_FULLSCREEN,
+//                WindowManager.LayoutParams.FLAG_FULLSCREEN);
 
         init();
     }
@@ -204,7 +209,7 @@ public class MainActivity extends AppCompatActivity {
                         break;
                     case R.id.button2:
                         Log.d(TAG, "onClick: 再次预览");
-                        startPreview();
+//                        startPreview();
                         break;
                 }
             }
@@ -262,30 +267,43 @@ public class MainActivity extends AppCompatActivity {
 
             @Override
             public void onError(@NonNull CameraDevice camera, int error) {
-                Log.e(TAG, "onError: " + error);
+                if (error == CameraDevice.StateCallback.ERROR_CAMERA_IN_USE) {
+                    Log.e(TAG, "onError: 相机已被占用" + error);
+                } else {
+                    Log.e(TAG, "onError: 打开相机出错 " + error);
+                }
                 camera.close();
             }
 
             @Override
             public void onClosed(@NonNull CameraDevice camera) {
-                Log.i(TAG, "onClosed: ");
+                Log.i(TAG, "onClosed: 相机已关闭");
                 mCameraDevice = null;
             }
         };
 
-        mSessionCaptureCallback = new CameraCaptureSession.CaptureCallback() {
-            // todo
+        mPreviewCaptureCallback = new CameraCaptureSession.CaptureCallback() {
             @Override
             public void onCaptureCompleted(@NonNull CameraCaptureSession session, @NonNull CaptureRequest request, @NonNull TotalCaptureResult result) {
                 // Log.d(TAG, "onCaptureCompleted: 完成 会一直打印");
-                if (mCaptureCount % 200 == 0) {
-                    Integer integer = request.get(CaptureRequest.JPEG_ORIENTATION);
-                    Log.e(TAG, "onCaptureCompleted: yyyy " + integer);
-                    Log.e(TAG, "onCaptureCompleted: yyyy " + request.toString() + " hashCode " + request.hashCode());
-                    Integer it = result.get(CaptureResult.JPEG_ORIENTATION);
-                    Log.e(TAG, "onCaptureCompleted: yyyy ** " + it);
+                if (mRepeatCaptureCount % 200 == 0) {
+                    Integer requestOrientation = request.get(CaptureRequest.JPEG_ORIENTATION);
+                    Integer resultOrientation = result.get(CaptureResult.JPEG_ORIENTATION);
+                    Log.d(TAG, "onCaptureCompleted: 验证hash值 " + request.toString() + " hashCode " + request.hashCode());
+                    Log.d(TAG, "onCaptureCompleted: requestOrientation=" + requestOrientation + " resultOrientation=" + resultOrientation);
+
+                    // region 已验证可行
+                    if (request == mPreviewRequest) {
+                        if (mRepeatCaptureCount == 0) {
+                            mCameraHandler.sendMessage(mCameraHandler.obtainMessage(MainActivity.MSG_PREVIEW_STARTED));
+                        }
+                        Log.d(TAG, "onCaptureCompleted: 预览已启动 ");
+                    }
+                    // endregion
                 }
-                mCaptureCount++;
+                if (request == mPreviewRequest) {
+                    mRepeatCaptureCount++;
+                }
             }
 
             @Override
@@ -382,9 +400,9 @@ public class MainActivity extends AppCompatActivity {
                 }
             };
             //停止预览
-//            mPreviewSession.stopRepeating();****************拍照不需要关闭预览
+//            mCaptureSession.stopRepeating();****************拍照不需要关闭预览
             //开始拍照，然后回调上面的接口重启预览，因为mCaptureBuilder设置ImageReader作为target，所以会自动回调ImageReader的onImageAvailable()方法保存图片
-            mPreviewSession.capture(mCaptureBuilder.build(), mImageSavedCallback, mCameraHandler);
+            mCaptureSession.capture(mCaptureBuilder.build(), mImageSavedCallback, mCameraHandler);
         } catch (CameraAccessException e) {
             e.printStackTrace();
         }
@@ -405,7 +423,7 @@ public class MainActivity extends AppCompatActivity {
 //        mCaptureRequestBuilder.addTarget(imageReaderSurface);
 
         //创建CaptureSession时加上imageReaderSurface，如下，这样预览数据就会同时输出到previewSurface和imageReaderSurface了
-        // mCameraDevice.createCaptureSession(Arrays.asList(previewSurface, imageReaderSurface), mSessionCaptureCallback);
+        // mCameraDevice.createCaptureSession(Arrays.asList(previewSurface, imageReaderSurface), mPreviewCaptureCallback);
     }
 
 
@@ -583,6 +601,7 @@ public class MainActivity extends AppCompatActivity {
         //获取Surface显示预览数据
         mPreviewSurface = new Surface(mSurfaceTexture);
 
+        // 多预览
         SurfaceTexture surfaceTexture = mPreviewTextureView2.getSurfaceTexture();
         Log.i(TAG, "startPreview: " + mPreviewTextureView2.getWidth() + "x" + mPreviewTextureView2.getHeight() + " : " + (1.f * mPreviewTextureView2.getHeight() / mPreviewTextureView2.getWidth()));
         Log.i(TAG, "startPreview: " + mPreviewSize.toString() + " : " + (1.f * mPreviewSize.getWidth() / mPreviewSize.getHeight()));
@@ -592,27 +611,27 @@ public class MainActivity extends AppCompatActivity {
         try {
             //创建请求的Builder，TEMPLATE_PREVIEW表示预览请求
             mPreviewRequestBuilder = mCameraDevice.createCaptureRequest(CameraDevice.TEMPLATE_PREVIEW);
-            //设置Surface作为预览数据的显示界面
+            //设置预览的显示界面
             mPreviewRequestBuilder.addTarget(mPreviewSurface);
 
+            // 多预览
             mPreviewRequestBuilder.addTarget(surface);
 
             // 调整方向
             // mCaptureRequestBuilder.set();
 
             //创建预览会话，第一个参数是捕获数据的输出Surface列表，第二个参数是CameraCaptureSession的状态回调接口，当它创建好后会回调onConfigured方法，第三个参数用来确定Callback在哪个线程执行，为null的话就在当前线程执行
-            mCameraDevice.createCaptureSession(Arrays.asList(mPreviewSurface, mImageReader.getSurface(),surface), new CameraCaptureSession.StateCallback() {
+            mCameraDevice.createCaptureSession(Arrays.asList(mPreviewSurface, mImageReader.getSurface(), surface), new CameraCaptureSession.StateCallback() {
                 @Override
                 public void onConfigured(@NonNull CameraCaptureSession session) {
                     Log.i(TAG, "onConfigured: 创建createCaptureSession的状态回调 线程名 " + Thread.currentThread().getName());
                     try {
                         //预览请求成功后得到预览会话
                         mPreviewRequest = mPreviewRequestBuilder.build();
-                        mPreviewSession = session;
+                        mCaptureSession = session;
                         //设置反复捕获数据的请求，这样预览界面就会一直有数据显示
                         Log.d(TAG, "onConfigured: " + mPreviewRequest.toString() + " hashCode " + mPreviewRequest.hashCode());
-                        mPreviewSession.setRepeatingRequest(mPreviewRequest, mSessionCaptureCallback, mCameraHandler);
-                        mCameraHandler.sendMessage(mCameraHandler.obtainMessage(MainActivity.MSG_PREVIEW_STARTED));
+                        mCaptureSession.setRepeatingRequest(mPreviewRequest, mPreviewCaptureCallback, mCameraHandler);
                     } catch (CameraAccessException e) {
                         e.printStackTrace();
                     }
@@ -620,7 +639,7 @@ public class MainActivity extends AppCompatActivity {
 
                 @Override
                 public void onConfigureFailed(@NonNull CameraCaptureSession session) {
-
+                    Log.e(TAG, "onConfigureFailed: 创建CameraCaptureSession失败");
                 }
             }, mCameraHandler);
         } catch (CameraAccessException e) {

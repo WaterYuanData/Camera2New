@@ -66,14 +66,13 @@ public class MyCameraUtils {
     }
 
     public Size getOptimalSize(Size[] sizes, int width, int height) {
+        Size size = null;
         int max = Math.max(width, height);
         int min = Math.min(width, height);
-        Size size = new Size(max, min);
         float rate = 1.0f * max / min;
-        Log.i(TAG, "getOptimalSize: width=" + width);
-        Log.i(TAG, "getOptimalSize: height=" + height);
-        Log.i(TAG, "getOptimalSize: rate=" + rate);
+        Log.i(TAG, "getOptimalSize: 输入= " + width + "x" + height + " rate=" + rate);
         // todo 选取规则
+        long currentTimeMillis = System.currentTimeMillis();
         List<Size> sizeList = Arrays.asList(sizes);
         Collections.sort(sizeList, new Comparator<Size>() {
             @Override
@@ -88,13 +87,22 @@ public class MyCameraUtils {
                 return 0;
             }
         });
+        Log.d(TAG, "getOptimalSize: 排序耗时 " + (System.currentTimeMillis() - currentTimeMillis));
+        boolean find = false;
         for (int i = 0; i < sizeList.size(); i++) {
             Log.d(TAG, "getOptimalSize: 排序后" + sizeList.get(i).toString());
-            if (sizeList.get(i).getWidth() == max && 1.0f * sizeList.get(i).getWidth() / sizeList.get(i).getHeight() - rate < 0.1) {
-                size = sizeList.get(i);
-                Log.i(TAG, "getOptimalSize: 已选取合适的size" + size);
-//                break;
+            if (!find) {
+                if (Math.abs(1.0f * sizeList.get(i).getWidth() / sizeList.get(i).getHeight() - rate) < 0.1f) {
+                    if (sizeList.get(i).getWidth() < max) {
+                        size = sizeList.get(i);
+                        find = true;
+                        Log.i(TAG, "getOptimalSize: 已找到合适的预览尺寸" + size);
+                    }
+                }
             }
+        }
+        if (!find) {
+            Log.e(TAG, "getOptimalSize: 未找到合适的预览尺寸");
         }
         return size;
     }
