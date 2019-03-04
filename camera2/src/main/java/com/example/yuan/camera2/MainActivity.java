@@ -59,6 +59,24 @@ public class MainActivity extends AppCompatActivity {
     private int mDeviceOrientation;
     private boolean mPause = false;
 
+    private int mDisplayOrientation;
+    private int mNeedRotation;
+    private Integer mSensorOrientation;
+
+    private static final SparseIntArray ORIENTATION = new SparseIntArray();
+
+    /*
+      屏幕方向=0 拍照方向=90
+      屏幕方向=1 拍照方向=0
+      屏幕方向=3 拍照方向=180
+      */
+    static {
+        ORIENTATION.append(Surface.ROTATION_0, 90);
+        ORIENTATION.append(Surface.ROTATION_90, 0);
+        ORIENTATION.append(Surface.ROTATION_180, 270);
+        ORIENTATION.append(Surface.ROTATION_270, 180);
+    }
+
     // 预览
     private TextureView mPreviewTextureView;
     private TextureView.SurfaceTextureListener mTextureListener;
@@ -113,8 +131,36 @@ public class MainActivity extends AppCompatActivity {
                 mDeviceOrientation = newOrientation;
                 Log.i(TAG, "onOrientationChanged: 设备方向 mDeviceOrientation=" + mDeviceOrientation);
                 int rotation = getWindowManager().getDefaultDisplay().getRotation();
-                // todo 在模拟器上不生效吗？一直是0
-                Log.i(TAG, "onOrientationChanged: 窗口方向 getWindowManager=" + rotation);
+                Log.i(TAG, "onOrientationChanged: 状态栏窗口的方向 getWindowManager=" + rotation);
+                switch (mDeviceOrientation) {
+                    case 0:
+                        mDisplayOrientation = mDeviceOrientation;
+                        break;
+                    case 90:
+                        mDisplayOrientation = 270;
+                        break;
+                    case 180:
+                        mDisplayOrientation = 180;
+                        break;
+                    case 270:
+                        mDisplayOrientation = 90;
+                        break;
+                }
+                switch (mDisplayOrientation) {
+                    case 0:
+                        mNeedRotation = mSensorOrientation;
+                        break;
+                    case 90:
+                        mNeedRotation = 180;
+                        break;
+                    case 180:
+                        mNeedRotation = 270;
+                        break;
+                    case 270:
+                        mNeedRotation = 0;
+                        break;
+
+                }
             }
             /*
               0<=orientation<45 则 newOrientation=0
@@ -313,22 +359,6 @@ public class MainActivity extends AppCompatActivity {
         };
     }
 
-    private static final SparseIntArray ORIENTATION = new SparseIntArray();
-
-
-    /*
-      屏幕方向=0 拍照方向=90
-      屏幕方向=1 拍照方向=0
-      屏幕方向=3 拍照方向=180
-      */
-    static {
-        ORIENTATION.append(Surface.ROTATION_0, 90);
-        ORIENTATION.append(Surface.ROTATION_90, 0);
-        ORIENTATION.append(Surface.ROTATION_180, 270);
-        ORIENTATION.append(Surface.ROTATION_270, 180);
-    }
-
-
     // 创建保存图片的线程
     public static class ImageSaverTask implements Runnable {
         private Image mImage;
@@ -380,7 +410,7 @@ public class MainActivity extends AppCompatActivity {
         try {
             //首先我们创建请求拍照的CaptureRequest
             CaptureRequest.Builder mCaptureBuilder = mCameraDevice.createCaptureRequest(CameraDevice.TEMPLATE_STILL_CAPTURE);
-            //获取屏幕方向
+            //获取状态栏窗口的方向
             int rotation = getWindowManager().getDefaultDisplay().getRotation();
             //设置CaptureRequest输出到mImageReader
             mCaptureBuilder.addTarget(mImageReader.getSurface());
@@ -388,7 +418,7 @@ public class MainActivity extends AppCompatActivity {
             mCaptureBuilder.addTarget(mPreviewSurface);
             //设置拍照方向
             mCaptureBuilder.set(CaptureRequest.JPEG_ORIENTATION, ORIENTATION.get(rotation));
-            Log.d(TAG, "capture: 窗口方向=" + rotation + " 修正后的拍照方向=" + ORIENTATION.get(rotation));
+            Log.d(TAG, "capture: 状态栏窗口方向=" + rotation + " 修正后的拍照方向=" + ORIENTATION.get(rotation));
             //这个回调接口用于拍照结束时重启预览，因为拍照会导致预览停止
             CameraCaptureSession.CaptureCallback mImageSavedCallback = new CameraCaptureSession.CaptureCallback() {
                 @Override
@@ -447,8 +477,8 @@ public class MainActivity extends AppCompatActivity {
                 Integer hardwareLevel = characteristics.get(CameraCharacteristics.INFO_SUPPORTED_HARDWARE_LEVEL);
                 Log.d(TAG, "setupCamera: 相机支持的等级（0是最低级）=" + hardwareLevel);
 
-                Integer sensorOrientation = characteristics.get(CameraCharacteristics.SENSOR_ORIENTATION);
-                Log.d(TAG, "setupCamera: 相机的传感器方向=" + sensorOrientation);
+                mSensorOrientation = characteristics.get(CameraCharacteristics.SENSOR_ORIENTATION);
+                Log.d(TAG, "setupCamera: 相机的传感器方向=" + mSensorOrientation);
 
                 //获取StreamConfigurationMap，它是管理摄像头支持的所有输出格式和尺寸
                 StreamConfigurationMap map = characteristics.get(CameraCharacteristics.SCALER_STREAM_CONFIGURATION_MAP);
@@ -464,8 +494,9 @@ public class MainActivity extends AppCompatActivity {
                 Log.i(TAG, "setupCamera: 是否支持YUV_420_888 " + outputSupportedFor);
 
                 Size[] sizes = characteristics.get(CameraCharacteristics.JPEG_AVAILABLE_THUMBNAIL_SIZES);
-                for (int i = 0; i < sizes.length; i++) {
-                    Log.d(TAG, "setupCamera: 缩略图尺寸 " + sizes[i]);
+                assert sizes != null;
+                for (Size size : sizes) {
+                    Log.d(TAG, "setupCamera: 缩略图尺寸 " + size);
                 }
 
                 // Camera2拍照也是通过ImageReader来实现的
@@ -617,8 +648,9 @@ public class MainActivity extends AppCompatActivity {
             // 多预览
             mPreviewRequestBuilder.addTarget(surface);
 
-            // 调整方向
-            // mCaptureRequestBuilder.set();
+            // 矫正方向
+            Log.i(TAG, "startPreview: 屏幕显示方向=" + mDisplayOrientation + " 需要旋转=" + mNeedRotation);
+            mPreviewRequestBuilder.set(CaptureRequest.JPEG_ORIENTATION, mNeedRotation);
 
             //创建预览会话，第一个参数是捕获数据的输出Surface列表，第二个参数是CameraCaptureSession的状态回调接口，当它创建好后会回调onConfigured方法，第三个参数用来确定Callback在哪个线程执行，为null的话就在当前线程执行
             mCameraDevice.createCaptureSession(Arrays.asList(mPreviewSurface, mImageReader.getSurface(), surface), new CameraCaptureSession.StateCallback() {
