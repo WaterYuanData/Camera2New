@@ -57,6 +57,8 @@ public class MainActivity extends AppCompatActivity {
     private CameraDevice.StateCallback mStateCallback;
     private CameraCaptureSession.CaptureCallback mSessionCaptureCallback;
     private int mDeviceOrientation;
+    private boolean mPause = false;
+    private int mCaptureCount = 0;
 
     // 预览
     private TextureView mPreviewTextureView;
@@ -123,6 +125,7 @@ public class MainActivity extends AppCompatActivity {
     protected void onResume() {
         Log.i(TAG, "onResume: 线程名 " + Thread.currentThread().getName());
         super.onResume();
+        mPause = false;
         mPreviewTextureView.setSurfaceTextureListener(mTextureListener);
     }
 
@@ -130,7 +133,13 @@ public class MainActivity extends AppCompatActivity {
     protected void onPause() {
         Log.i(TAG, "onPause: ");
         super.onPause();
-        mCameraHandler.sendMessage(mCameraHandler.obtainMessage(MSG_CLOSE_CAMERA));
+        mPause = true;
+        if (mCameraDevice != null) {
+            mCameraDevice.close();
+        } else {
+            Log.e(TAG, "onPause: 相机未打开 故不需要关闭 请排查未打开的原因");
+        }
+        // mCameraHandler.sendMessage(mCameraHandler.obtainMessage(MSG_CLOSE_CAMERA));
     }
 
     public void init() {
@@ -218,6 +227,10 @@ public class MainActivity extends AppCompatActivity {
             @Override
             public void onSurfaceTextureUpdated(SurfaceTexture surface) {
                 // Log.d(TAG, "onSurfaceTextureUpdated: 会一直打印");
+                if (!mPause && mCameraDevice == null) {
+                    Log.i(TAG, "onSurfaceTextureUpdated: 打开相机 ... ");
+                    mCameraHandler.sendMessage(mCameraHandler.obtainMessage(MSG_OPEN_CAMERA));
+                }
             }
         };
 
@@ -253,6 +266,14 @@ public class MainActivity extends AppCompatActivity {
             @Override
             public void onCaptureCompleted(@NonNull CameraCaptureSession session, @NonNull CaptureRequest request, @NonNull TotalCaptureResult result) {
                 // Log.d(TAG, "onCaptureCompleted: 完成 会一直打印");
+                if (mCaptureCount % 200 == 0) {
+                    Integer integer = request.get(CaptureRequest.JPEG_ORIENTATION);
+                    Log.e(TAG, "onCaptureCompleted: yyyy " + integer);
+                    Log.e(TAG, "onCaptureCompleted: yyyy " + request.toString() + " hashCode " + request.hashCode());
+                    Integer it = result.get(CaptureResult.JPEG_ORIENTATION);
+                    Log.e(TAG, "onCaptureCompleted: yyyy ** " + it);
+                }
+                mCaptureCount++;
             }
 
             @Override
@@ -573,6 +594,7 @@ public class MainActivity extends AppCompatActivity {
                         mPreviewRequest = mPreviewRequestBuilder.build();
                         mPreviewSession = session;
                         //设置反复捕获数据的请求，这样预览界面就会一直有数据显示
+                        Log.d(TAG, "onConfigured: " + mPreviewRequest.toString() + " hashCode " + mPreviewRequest.hashCode());
                         mPreviewSession.setRepeatingRequest(mPreviewRequest, mSessionCaptureCallback, mCameraHandler);
                         mCameraHandler.sendMessage(mCameraHandler.obtainMessage(MainActivity.MSG_PREVIEW_STARTED));
                     } catch (CameraAccessException e) {

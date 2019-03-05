@@ -1,9 +1,11 @@
 package com.example.yuan.camera2;
 
+import android.app.Activity;
 import android.hardware.camera2.CameraCharacteristics;
 import android.util.Log;
 import android.util.Size;
 import android.view.OrientationEventListener;
+import android.view.Surface;
 
 import java.util.Arrays;
 import java.util.Collections;
@@ -24,12 +26,33 @@ public class MyCameraUtils {
         return mCameraUtils;
     }
 
+    public static int getDisplayRotation(Activity activity) {
+        int rotation = activity.getWindowManager().getDefaultDisplay().getRotation();
+        switch (rotation) {
+            case Surface.ROTATION_0:
+                return 0;
+            case Surface.ROTATION_90:
+                return 90;
+            case Surface.ROTATION_180:
+                return 180;
+            case Surface.ROTATION_270:
+                return 270;
+        }
+        return 0;
+    }
+
     public int getJpegOrientation(CameraCharacteristics cameraCharacteristics, int deviceOrientation) {
         int myDeviceOrientation = deviceOrientation;
         if (myDeviceOrientation == OrientationEventListener.ORIENTATION_UNKNOWN) {
             return 0;
         }
         // Round device orientation to a multiple of 90
+        /*
+         * <45 >315 0 0
+         * 45<= <135 1 90
+         * 135<= <225 2 180
+         * 225<= <315 3 270
+         * */
         myDeviceOrientation = (myDeviceOrientation + 45) / 90 * 90;
         // Reverse device orientation for front-facing cameras
         Integer lensFacing = cameraCharacteristics.get(CameraCharacteristics.LENS_FACING);
