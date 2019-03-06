@@ -65,6 +65,7 @@ public class DocumentsUtils {
     /**
      * 必须在插拔SD卡的广播接收器中调用该方法
      */
+    @SuppressWarnings("all")
     public static void reInit() {
         mRootPath = "";
         File[] externals = mContext.getExternalFilesDirs("external");
@@ -180,6 +181,7 @@ public class DocumentsUtils {
     /**
      * 判断一个文件路径是否在SD卡上
      */
+    @SuppressWarnings("unused")
     public static boolean isOnSdCard(String file) {
         return isOnSdCard(new File(file));
     }
@@ -304,6 +306,7 @@ public class DocumentsUtils {
     /**
      * 兼容DocumentFile的删除文件/文件夹
      */
+    @SuppressWarnings("unused")
     public static boolean delete(File file, boolean isDirectory) {
         boolean ret = file.delete();
         if (!ret && isOnSdCard(file)) {
@@ -318,6 +321,7 @@ public class DocumentsUtils {
     /**
      * 不借助DocumentFile的条件下,判断文件是否可写
      */
+    @SuppressWarnings("all")
     public static boolean canWriteNotByDoc(File file) {
         boolean res = file.exists() && file.canWrite();
         if (!res && !file.exists()) {
@@ -338,6 +342,7 @@ public class DocumentsUtils {
     /**
      * 借助DocumentFile的条件下,判断文件/文件夹是否可写
      */
+    @SuppressWarnings("unused")
     public static boolean canWriteByDoc(File file, boolean isDirectory) {
         boolean res = canWriteNotByDoc(file);
         if (!res && isOnSdCard(file)) {
@@ -422,6 +427,7 @@ public class DocumentsUtils {
      * 获取一个文件的FileDescriptor,一般用于MediaRecorder.setOutputFile
      * 注意:调用前务必进行 !canWriteNotByDoc && isOnSdCard 判断,满足条件才能调用
      */
+    @SuppressWarnings("unused")
     public static FileDescriptor getFileDescriptor(String filePath) {
         return getFileDescriptor(new File(filePath));
     }
@@ -463,6 +469,7 @@ public class DocumentsUtils {
      * 获取一个文件的FileOutputStream
      * 会根据 !canWriteNotByDoc && isOnSdCard 自动判断:用DocumentFile形式还是非DocumentFile形式
      */
+    @SuppressWarnings("all")
     public static OutputStream getOutputStream(File destFile) {
         OutputStream out = null;
         Log.i(TAG, "getOutputStream: " + destFile.toString());
@@ -485,6 +492,7 @@ public class DocumentsUtils {
     /**
      * 在documentFile下快速创建destFile所指定的文件
      */
+    @SuppressWarnings("unused")
     public static OutputStream getOutputStream(File destFile, DocumentFile documentFile) {
         OutputStream out = null;
         long currentTimeMillis = System.currentTimeMillis();
