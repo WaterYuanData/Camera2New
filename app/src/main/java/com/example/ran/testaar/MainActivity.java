@@ -5,6 +5,7 @@ import android.content.Intent;
 import android.net.Uri;
 import android.os.storage.StorageManager;
 import android.os.storage.StorageVolume;
+import android.support.v4.provider.DocumentFile;
 import android.support.v7.app.AppCompatActivity;
 import android.os.Bundle;
 import android.util.Log;
@@ -15,6 +16,8 @@ import android.widget.Toast;
 import com.cloudminds.storage.DocumentsUtils;
 
 import java.io.File;
+import java.io.IOException;
+import java.io.InputStream;
 import java.io.OutputStream;
 
 public class MainActivity extends AppCompatActivity {
@@ -42,7 +45,7 @@ public class MainActivity extends AppCompatActivity {
 
     public static int getDisplayRotation(Activity activity) {
         int rotation = activity.getWindowManager().getDefaultDisplay().getRotation();
-        Log.d(TAG, "getDisplayRotation: 显示方向 " + rotation);
+        Log.d(TAG, "getDisplayRotation: 状态栏的方向 " + rotation);
         switch (rotation) {
             case Surface.ROTATION_0:
                 return 0;
@@ -54,6 +57,39 @@ public class MainActivity extends AppCompatActivity {
                 return 270;
         }
         return 0;
+    }
+
+    public void testRead(){
+        String sdRootPath = DocumentsUtils.getSdRootPath();
+        String s1 = sdRootPath + "/testRead/Folder";
+        String s2 = sdRootPath + "/testRead/2.txt";
+        // todo getOutputStream有一个误操作会把文件夹当文件生成
+        DocumentFile documentFile = DocumentsUtils.getDocumentFile(new File(s1), true);
+        OutputStream outputStream = DocumentsUtils.getOutputStream(s1);
+        DocumentFile documentFile2 = DocumentsUtils.getDocumentFile(new File(s2), false);
+        OutputStream outputStream2 = DocumentsUtils.getOutputStream(s2);
+        String st = "你好 hello";
+        byte[] bytes = st.getBytes();
+        try {
+            outputStream2.write(bytes, (int) documentFile2.length(), bytes.length);
+        } catch (IOException e) {
+            e.printStackTrace();
+        } finally {
+            if (outputStream2 != null) {
+                try {
+                    // outputStream2.flush(); 作用???
+                    outputStream2.close();
+                } catch (IOException e) {
+                    e.printStackTrace();
+                }
+            }
+        }
+        InputStream inputStream = DocumentsUtils.getInputStream(new File(s2));
+        try {
+            inputStream.read();
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
     }
 
     public void test() {
@@ -88,6 +124,8 @@ public class MainActivity extends AppCompatActivity {
         DocumentsUtils.mkdirs(new File(s4));
 
         testfile();
+
+        testRead();
     }
 
     void testfile() {
