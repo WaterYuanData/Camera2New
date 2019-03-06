@@ -127,6 +127,8 @@ public class MainActivity extends AppCompatActivity {
         super.onResume();
         mPause = false;
         mPreviewTextureView.setSurfaceTextureListener(mTextureListener);
+        mPreviewTextureView.setAlpha(0);
+        hideSystemBars();
     }
 
     @Override
@@ -140,6 +142,16 @@ public class MainActivity extends AppCompatActivity {
             Log.e(TAG, "onPause: 相机未打开 故不需要关闭 请排查未打开的原因");
         }
         // mCameraHandler.sendMessage(mCameraHandler.obtainMessage(MSG_CLOSE_CAMERA));
+    }
+
+    private void hideSystemBars() {
+        // Please note: this method must be called both in onResume() and onWindowFocusChanged() !!!
+        View decorView = getWindow().getDecorView();
+        decorView.setSystemUiVisibility(View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION
+                | View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN
+                | View.SYSTEM_UI_FLAG_HIDE_NAVIGATION
+                | View.SYSTEM_UI_FLAG_FULLSCREEN
+                | View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY);
     }
 
     public void init() {
@@ -424,6 +436,8 @@ public class MainActivity extends AppCompatActivity {
                 StreamConfigurationMap map = characteristics.get(CameraCharacteristics.SCALER_STREAM_CONFIGURATION_MAP);
                 //根据TextureView的尺寸设置预览尺寸
                 assert map != null;
+                width = mPreviewTextureView2.getWidth();
+                height = mPreviewTextureView2.getHeight();
                 mPreviewSize = getOptimalSize(map.getOutputSizes(SurfaceTexture.class), width, height);
                 Log.d(TAG, "setupCamera: mPreviewSize=" + mPreviewSize.toString());
                 mCameraId = cameraId;
@@ -570,6 +584,8 @@ public class MainActivity extends AppCompatActivity {
         mPreviewSurface = new Surface(mSurfaceTexture);
 
         SurfaceTexture surfaceTexture = mPreviewTextureView2.getSurfaceTexture();
+        Log.i(TAG, "startPreview: " + mPreviewTextureView2.getWidth() + "x" + mPreviewTextureView2.getHeight() + " : " + (1.f * mPreviewTextureView2.getHeight() / mPreviewTextureView2.getWidth()));
+        Log.i(TAG, "startPreview: " + mPreviewSize.toString() + " : " + (1.f * mPreviewSize.getWidth() / mPreviewSize.getHeight()));
         surfaceTexture.setDefaultBufferSize(mPreviewSize.getWidth(), mPreviewSize.getHeight());
         Surface surface = new Surface(surfaceTexture);
 
