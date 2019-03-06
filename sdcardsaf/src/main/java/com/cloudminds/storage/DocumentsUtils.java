@@ -1,5 +1,6 @@
 package com.cloudminds.storage;
 
+import android.annotation.SuppressLint;
 import android.app.Activity;
 import android.content.Context;
 import android.content.Intent;
@@ -42,6 +43,7 @@ public class DocumentsUtils {
 
     private static String mRootPath = "";
 
+    @SuppressLint("StaticFieldLeak")
     private static Context mContext;
 
     private static Class<?> treeDocumentFile = null;
@@ -99,6 +101,7 @@ public class DocumentsUtils {
     /**
      * 判断SD卡是否已有效加载
      */
+    @SuppressWarnings("unused")
     public static boolean isMounted() {
         return !TextUtils.isEmpty(mRootPath);
     }
@@ -122,6 +125,7 @@ public class DocumentsUtils {
     /**
      * 获取SD卡文件系统的类型,即SD卡的格式
      */
+    @SuppressWarnings("all")
     public static String getSdCardFileSystemType() {
         String resultString = "";
         StorageManager sm = mContext.getSystemService(StorageManager.class);
@@ -183,6 +187,7 @@ public class DocumentsUtils {
     /**
      * 判断一个文件是否在SD卡上
      */
+    @SuppressWarnings("all")
     public static boolean isOnSdCard(File file) {
         return getExtSdCardFolder(file) != null;
     }
@@ -223,6 +228,7 @@ public class DocumentsUtils {
      * @param mimeType    文件的文件类型
      * @return The DocumentFile
      */
+    @SuppressWarnings("all")
     public static DocumentFile getDocumentFile(File file, boolean isDirectory, String mimeType) {
         String baseFolder = getExtSdCardFolder(file);
         boolean originalDirectory = false;
@@ -283,6 +289,7 @@ public class DocumentsUtils {
     /**
      * 兼容DocumentFile的创建文件夹
      */
+    @SuppressWarnings("all")
     public static boolean mkdirs(File dir) {
         boolean res = dir.mkdirs();
         if (!res) {
@@ -339,6 +346,7 @@ public class DocumentsUtils {
         }
         return res;
     }
+
     /**
      * 兼容DocumentFile的重命名文件/文件夹
      *
@@ -346,6 +354,7 @@ public class DocumentsUtils {
      * @param dest        重命名后的目标文件
      * @param isDirectory 指明文件/文件夹
      */
+    @SuppressWarnings("unused")
     public static boolean renameTo(File src, File dest, boolean isDirectory) {
         return renameTo(src, dest, isDirectory, "");
     }
@@ -356,8 +365,9 @@ public class DocumentsUtils {
      * @param src         重命名前的源文件
      * @param dest        重命名后的目标文件
      * @param isDirectory 指明文件/文件夹
-     * @param mimeType the mime type of the target file
+     * @param mimeType    the mime type of the target file
      */
+    @SuppressWarnings("all")
     public static boolean renameTo(File src, File dest, boolean isDirectory, String mimeType) {
         boolean res = src.renameTo(dest);
         if (!res && isOnSdCard(dest)) {
@@ -390,6 +400,7 @@ public class DocumentsUtils {
      * 获取文件的FileInputStream
      * 会根据 !canWriteNotByDoc && isOnSdCard 自动判断:用DocumentFile形式还是非DocumentFile形式
      */
+    @SuppressWarnings("unused")
     public static InputStream getInputStream(File destFile) {
         InputStream in = null;
         try {
@@ -420,6 +431,7 @@ public class DocumentsUtils {
      * 获取一个文件的FileDescriptor,一般用于MediaRecorder.setOutputFile
      * 注意:调用前务必进行 !canWriteNotByDoc && isOnSdCard 判断,满足条件才能调用
      */
+    @SuppressWarnings("all")
     public static FileDescriptor getFileDescriptor(File destFile) {
         FileDescriptor fileDescriptor = null;
         Log.i(TAG, "getFileDescriptor: " + destFile.toString());
@@ -475,19 +487,25 @@ public class DocumentsUtils {
      */
     public static OutputStream getOutputStream(File destFile, DocumentFile documentFile) {
         OutputStream out = null;
+        long currentTimeMillis = System.currentTimeMillis();
         if (destFile != null) {
             Log.i(TAG, "getOutputStream: destFile=" + destFile.toString());
             try {
-                if (!canWriteNotByDoc(destFile) && isOnSdCard(destFile) && documentFile != null) {
+                if (TextUtils.isEmpty(mRootPath) || new File(mRootPath).canWrite() || !destFile.toString().contains(mRootPath)) {
+                    out = new FileOutputStream(destFile);
+                } else if (documentFile != null) {
                     Log.i(TAG, "getOutputStream: documentFile=" + documentFile.getUri().getPath());
                     String canonicalPath = destFile.getCanonicalPath();
                     String substring = canonicalPath.substring(canonicalPath.lastIndexOf(File.separator) + 1);
+                    Log.d(TAG, "getOutputStream: costTimeByString=" + (System.currentTimeMillis() - currentTimeMillis));
+                    currentTimeMillis = System.currentTimeMillis();
                     DocumentFile file = documentFile.createFile("", substring);
-                    if (file != null && file.canWrite()) {
+                    Log.d(TAG, "getOutputStream: costTimeByCreateFile=" + (System.currentTimeMillis() - currentTimeMillis));
+                    currentTimeMillis = System.currentTimeMillis();
+                    if (file != null) {
                         out = mContext.getContentResolver().openOutputStream(file.getUri());
+                        Log.d(TAG, "getOutputStream: costTimeByOpenOutputStream=" + (System.currentTimeMillis() - currentTimeMillis));
                     }
-                } else {
-                    out = new FileOutputStream(destFile);
                 }
             } catch (FileNotFoundException e) {
                 Log.e(TAG, "getOutputStream: Failed");
@@ -501,6 +519,7 @@ public class DocumentsUtils {
     /**
      * 保存授权框返回的Uri
      */
+    @SuppressWarnings("all")
     public static boolean saveTreeUri(Uri uri) {
         DocumentFile file = DocumentFile.fromTreeUri(mContext, uri);
         if (file != null && file.canWrite()) {
@@ -539,8 +558,10 @@ public class DocumentsUtils {
 
     /**
      * Request write sdcard root path permission.
+     *
      * @param activity the activity request this permission and handle the request result.
      */
+    @SuppressWarnings("all")
     public static void requestWriteSDcardPermission(Activity activity) {
         Intent intent = null;
         StorageManager sm = (StorageManager) activity.getSystemService(Context.STORAGE_SERVICE);
@@ -556,14 +577,16 @@ public class DocumentsUtils {
 
     /**
      * Get the Uri of the SDcard Document File.
+     *
      * @param filePath the path of the file
      * @return The Uri of the file if it exist on SDcard, otherwise null.
      */
+    @SuppressWarnings("unused")
     public static Uri getDocumentFileUri(String filePath) {
         Uri docUri = null;
         Log.d(TAG, "getDocumentFileUri: " + filePath);
         try {
-            File file =  new File(filePath);
+            File file = new File(filePath);
             DocumentFile docfile = getDocumentFile(file, file.isDirectory());
             if (docfile != null) {
                 docUri = docfile.getUri();
