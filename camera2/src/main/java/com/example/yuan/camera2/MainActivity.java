@@ -85,7 +85,7 @@ public class MainActivity extends AppCompatActivity {
     private CaptureRequest.Builder mPreviewRequestBuilder;
     private CaptureRequest mPreviewRequest;
     private CameraCaptureSession.CaptureCallback mPreviewCaptureCallback;
-    private int mRepeatCaptureCount = 0;
+    private int mRepeatCaptureCount;
     // 多预览
     private TextureView mPreviewTextureView2;
 
@@ -290,8 +290,16 @@ public class MainActivity extends AppCompatActivity {
             @Override
             public void onSurfaceTextureUpdated(SurfaceTexture surface) {
                 // Log.d(TAG, "onSurfaceTextureUpdated: 会一直打印");
-                if (!mPause && mCameraDevice == null) {
-                    Log.i(TAG, "onSurfaceTextureUpdated: 打开相机 ... ");
+                /*
+                 * 1. 预览启动后该方法被一直调用的原因是setRepeatingRequest导致onCaptureCompleted被一直调用，
+                 *    及与其对应的target连接的surface
+                 * 2. 从Activity的onPause()后到相机onClosed()后只会调用一次该方法
+                 * 3. 在onPause()后的onResume()在 mCameraDevice==null 条件下只会调用一次该方法
+                 * */
+                if (mPause) {
+                    Log.d(TAG, "onSurfaceTextureUpdated: onPause() 执行一次");
+                } else if (mCameraDevice == null) {
+                    Log.i(TAG, "onSurfaceTextureUpdated: onPause()后的onResume() 且 mCameraDevice==null 下，执行一次");
                     mCameraHandler.sendMessage(mCameraHandler.obtainMessage(MSG_OPEN_CAMERA));
                 }
             }
@@ -331,8 +339,8 @@ public class MainActivity extends AppCompatActivity {
         mPreviewCaptureCallback = new CameraCaptureSession.CaptureCallback() {
             @Override
             public void onCaptureCompleted(@NonNull CameraCaptureSession session, @NonNull CaptureRequest request, @NonNull TotalCaptureResult result) {
-                // Log.d(TAG, "onCaptureCompleted: 完成 会一直打印");
-                if (mRepeatCaptureCount % 200 == 0) {
+                // Log.d(TAG, "onCaptureCompleted: 完成 会一直打印"); 导致onSurfaceTextureUpdated被一直打印
+                if (mRepeatCaptureCount % 2000 == 0) {
                     Integer requestOrientation = request.get(CaptureRequest.JPEG_ORIENTATION);
                     Integer resultOrientation = result.get(CaptureResult.JPEG_ORIENTATION);
                     Log.d(TAG, "onCaptureCompleted: 验证hash值 " + request.toString() + " hashCode " + request.hashCode());
@@ -664,6 +672,7 @@ public class MainActivity extends AppCompatActivity {
                         //设置反复捕获数据的请求，这样预览界面就会一直有数据显示
                         Log.d(TAG, "onConfigured: " + mPreviewRequest.toString() + " hashCode " + mPreviewRequest.hashCode());
                         mCaptureSession.setRepeatingRequest(mPreviewRequest, mPreviewCaptureCallback, mCameraHandler);
+                        mRepeatCaptureCount = 0;
                     } catch (CameraAccessException e) {
                         e.printStackTrace();
                     }
