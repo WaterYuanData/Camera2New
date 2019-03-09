@@ -94,6 +94,8 @@ public class MainActivity extends AppCompatActivity {
     // 多预览
     private TextureView mPreviewTextureView2;
     private Surface mPreviewSurface2;
+    // 用ImageReader做预览，练习调整方向
+    private ImageReader mPreviewImageReader;
 
     // 拍照
     private ImageReader mImageReader;
@@ -136,9 +138,6 @@ public class MainActivity extends AppCompatActivity {
             if (newOrientation != mDeviceOrientation) {
                 //返回的mDeviceOrientation就是手机方向，为0°、90°、180°和270°中的一个
                 mDeviceOrientation = newOrientation;
-                Log.i(TAG, "onOrientationChanged: 设备方向 mDeviceOrientation=" + mDeviceOrientation);
-                int rotation = getWindowManager().getDefaultDisplay().getRotation();
-                Log.i(TAG, "onOrientationChanged: 状态栏窗口的方向 getWindowManager=" + rotation);
                 switch (mDeviceOrientation) {
                     case 0:
                         mDisplayOrientation = mDeviceOrientation;
@@ -166,8 +165,10 @@ public class MainActivity extends AppCompatActivity {
                     case 270:
                         mNeedRotation = 0;
                         break;
-
                 }
+                Log.i(TAG, "onOrientationChanged: 设备方向 mDeviceOrientation=" + mDeviceOrientation);
+                Log.i(TAG, "onOrientationChanged: 显示方向 mDisplayOrientation=" + mDisplayOrientation);
+                Log.i(TAG, "onOrientationChanged: 需要旋转 mNeedRotation=" + mNeedRotation);
             }
             /*
               0<=orientation<45 则 newOrientation=0
@@ -471,15 +472,14 @@ public class MainActivity extends AppCompatActivity {
         try {
             //首先我们创建请求拍照的CaptureRequest
             CaptureRequest.Builder mCaptureBuilder = mCameraDevice.createCaptureRequest(CameraDevice.TEMPLATE_STILL_CAPTURE);
-            //获取状态栏窗口的方向
-            int rotation = getWindowManager().getDefaultDisplay().getRotation();
             //设置CaptureRequest输出到mImageReader
             mCaptureBuilder.addTarget(mImageReader.getSurface());
             //将本次capture也输出到预览的surface上，避免卡顿 todo 然而效果不明显
-            mCaptureBuilder.addTarget(mPreviewSurface);
-            //设置拍照方向
+            mCaptureBuilder.addTarget(mPreviewSurface2);
+            int rotation = getWindowManager().getDefaultDisplay().getRotation();
+            //设置拍照方向,为何用状态栏方向去修正拍照方向？？？
             mCaptureBuilder.set(CaptureRequest.JPEG_ORIENTATION, ORIENTATION.get(rotation));
-            Log.d(TAG, "capture: 状态栏窗口方向=" + rotation + " 修正后的拍照方向=" + ORIENTATION.get(rotation));
+            Log.d(TAG, "capture: 状态栏方向=" + rotation + " 修正后的拍照方向=" + ORIENTATION.get(rotation));
             //这个回调接口用于拍照结束时重启预览，因为拍照会导致预览停止
             CameraCaptureSession.CaptureCallback mImageSavedCallback = new CameraCaptureSession.CaptureCallback() {
                 @Override
@@ -505,16 +505,7 @@ public class MainActivity extends AppCompatActivity {
      */
     @SuppressWarnings("unused")
     public void beforeStartPreview() {
-        setupImageReader();
 
-        //获取ImageReader的Surface
-        Surface imageReaderSurface = mImageReader.getSurface();
-
-        //CaptureRequest添加imageReaderSurface，不加的话就会导致ImageReader的onImageAvailable()方法不会回调
-//        mCaptureRequestBuilder.addTarget(imageReaderSurface);
-
-        //创建CaptureSession时加上imageReaderSurface，如下，这样预览数据就会同时输出到previewSurface和imageReaderSurface了
-        // mCameraDevice.createCaptureSession(Arrays.asList(previewSurface, imageReaderSurface), mPreviewCaptureCallback);
     }
 
     @SuppressWarnings("all")
@@ -539,7 +530,8 @@ public class MainActivity extends AppCompatActivity {
                 Log.d(TAG, "setupCamera: 相机支持的等级（0是最低级）=" + hardwareLevel);
 
                 mSensorOrientation = characteristics.get(CameraCharacteristics.SENSOR_ORIENTATION);
-                Log.d(TAG, "setupCamera: 相机的传感器方向=" + mSensorOrientation);
+                Log.d(TAG, "setupCamera: 相机传感器方向=" + mSensorOrientation);
+                mNeedRotation = mSensorOrientation;
 
                 //获取StreamConfigurationMap，它是管理摄像头支持的所有输出格式和尺寸
                 StreamConfigurationMap map = characteristics.get(CameraCharacteristics.SCALER_STREAM_CONFIGURATION_MAP);
@@ -694,6 +686,7 @@ public class MainActivity extends AppCompatActivity {
         mPreviewRequestBuilder.addTarget(mPreviewSurface);
         // 多预览
         mPreviewRequestBuilder.addTarget(mPreviewSurface2);
+//        mPreviewRequestBuilder.addTarget(mPreviewImageReader.getSurface());
         Log.d(TAG, "getPreviewRequestBuilder: hashCode=" + mPreviewRequestBuilder);
     }
 
@@ -729,25 +722,33 @@ public class MainActivity extends AppCompatActivity {
         try {
             getPreviewRequestBuilder();
 
-            // 矫正方向
+            // 矫正TextureView预览 已验证只能强制竖屏，否则非强制竖屏如下方法不行，不强制竖屏如何矫正？？？
             Log.i(TAG, "startPreview: 屏幕显示方向=" + mDisplayOrientation + " 需要旋转=" + mNeedRotation);
-            mPreviewRequestBuilder.set(CaptureRequest.JPEG_ORIENTATION, mNeedRotation);
+//            mPreviewRequestBuilder.set(CaptureRequest.JPEG_ORIENTATION, mNeedRotation);
+
+            // 已验证可以，矫正ImageReader的预览，为何用状态栏方向去修正ImageReader的预览方向？？？
+            int rotation = getWindowManager().getDefaultDisplay().getRotation();
+            Log.e(TAG, "startPreview: 状态栏方向=" + rotation + " 修正预览=" + ORIENTATION.get(rotation));
+//            mPreviewRequestBuilder.set(CaptureRequest.JPEG_ORIENTATION, ORIENTATION.get(rotation));
 
             //创建预览会话，第一个参数是捕获数据的输出Surface列表，第二个参数是CameraCaptureSession的状态回调接口，当它创建好后会回调onConfigured方法，第三个参数用来确定Callback在哪个线程执行，为null的话就在当前线程执行
-            mCameraDevice.createCaptureSession(Arrays.asList(mPreviewSurface, mImageReader.getSurface(), mPreviewSurface2), new CameraCaptureSession.StateCallback() {
-                @Override
-                public void onConfigured(@NonNull CameraCaptureSession session) {
-                    Log.i(TAG, "onConfigured: 创建createCaptureSession的状态回调 线程名 " + Thread.currentThread().getName());
-                    //预览请求成功后得到预览会话
-                    mCaptureSession = session;
-                    repeatPreview();
-                }
+            mCameraDevice.createCaptureSession(
+                    Arrays.asList(mPreviewSurface, mPreviewSurface2,
+                            mImageReader.getSurface(), mPreviewImageReader.getSurface()),
+                    new CameraCaptureSession.StateCallback() {
+                        @Override
+                        public void onConfigured(@NonNull CameraCaptureSession session) {
+                            Log.i(TAG, "onConfigured: 创建createCaptureSession的状态回调 线程名 " + Thread.currentThread().getName());
+                            //预览请求成功后得到预览会话
+                            mCaptureSession = session;
+                            repeatPreview();
+                        }
 
-                @Override
-                public void onConfigureFailed(@NonNull CameraCaptureSession session) {
-                    Log.e(TAG, "onConfigureFailed: 创建CameraCaptureSession失败");
-                }
-            }, mCameraHandler);
+                        @Override
+                        public void onConfigureFailed(@NonNull CameraCaptureSession session) {
+                            Log.e(TAG, "onConfigureFailed: 创建CameraCaptureSession失败");
+                        }
+                    }, mCameraHandler);
         } catch (CameraAccessException e) {
             e.printStackTrace();
         }
@@ -755,18 +756,25 @@ public class MainActivity extends AppCompatActivity {
 
     private void setupImageReader() {
         //前三个参数分别是需要的尺寸和格式，最后一个参数代表每次最多获取几帧数据，本例的2代表ImageReader中最多可以获取两帧图像流
-        mImageReader = ImageReader.newInstance(mPreviewSize.getWidth(), mPreviewSize.getHeight(),
-                ImageFormat.JPEG, 2);
+        mPreviewImageReader = ImageReader.newInstance(mPreviewSize.getWidth(), mPreviewSize.getHeight(),
+                ImageFormat.JPEG, 20);
         //监听ImageReader的事件，当有图像流数据可用时会回调onImageAvailable方法，它的参数就是预览帧数据，可以对这帧数据进行处理
-        mImageReader.setOnImageAvailableListener(new ImageReader.OnImageAvailableListener() {
+        mPreviewImageReader.setOnImageAvailableListener(new ImageReader.OnImageAvailableListener() {
             @Override
             public void onImageAvailable(ImageReader reader) {
-                Image image = reader.acquireLatestImage();
+                final Image image = reader.acquireLatestImage();
                 //我们可以将这帧数据转成字节数组，类似于Camera1的PreviewCallback回调的预览帧数据
                 ByteBuffer buffer = image.getPlanes()[0].getBuffer();
                 byte[] data = new byte[buffer.remaining()];
                 buffer.get(data);
-                image.close();
+                final Bitmap bitmap = BitmapFactory.decodeByteArray(data, 0, data.length);
+                runOnUiThread(new Runnable() {
+                    @Override
+                    public void run() {
+                        mThumbnail.setImageBitmap(bitmap);
+                        image.close();
+                    }
+                });
             }
         }, null);
 
