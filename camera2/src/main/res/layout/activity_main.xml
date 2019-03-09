@@ -30,7 +30,7 @@
         app:layout_constraintTop_toTopOf="parent" />
 
     <Button
-        android:id="@+id/button"
+        android:id="@+id/takePicture"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:layout_marginBottom="8dp"
@@ -47,13 +47,20 @@
         android:layout_marginStart="8dp"
         android:text="预览"
         app:layout_constraintBottom_toBottomOf="parent"
-        app:layout_constraintStart_toEndOf="@+id/button" />
+        app:layout_constraintStart_toEndOf="@id/takePicture" />
 
     <ImageView
-        android:id="@+id/imageView"
-        android:background="#55555555"
+        android:id="@+id/thumbnail"
         android:layout_width="80dp"
         android:layout_height="80dp"
+        android:background="#55555555"
         app:srcCompat="@android:color/transparent" />
 
+    <com.example.yuan.camera2.MyLayout
+        android:id="@+id/myLayout"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:background="@color/transparent2">
+
+    </com.example.yuan.camera2.MyLayout>
 </android.support.constraint.ConstraintLayout>
