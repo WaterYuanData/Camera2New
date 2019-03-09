@@ -109,6 +109,7 @@ public class MainActivity extends AppCompatActivity {
     private static final int MSG_PREVIEW_STARTED = 2;
     private ImageView mThumbnail;
     private MyLayout mMyLayout;
+    private Rect mRect;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -289,9 +290,11 @@ public class MainActivity extends AppCompatActivity {
                 mMyLayout.setEventX(eventX);
                 mMyLayout.setEventY(eventY);
                 mMyLayout.invalidate();
+                //
                 int width = mMyLayout.getWidth();
                 int height = mMyLayout.getHeight();
                 int radius = mMyLayout.getRadius();
+                Log.i(TAG, "onTouch: width=" + width + " height=" + height + " radius=" + radius);
                 int left = (int) (eventX - radius);
                 int top = (int) (eventY - radius);
                 int right = (int) (eventX + radius);
@@ -301,13 +304,34 @@ public class MainActivity extends AppCompatActivity {
                 if (right > width) right = width;
                 if (bottom > height) bottom = height;
                 Rect rect = new Rect(left, top, right, bottom);
+                Log.d(TAG, "onTouch: 变换前矩形 " + rect.toString());
+                // todo 屏幕坐标向相机坐标转换
+                float newX = eventY;
+                float newY = width - eventX;
+                int x = (int) (newX / height * mRect.width());
+                int y = (int) (newY / width * mRect.height());
+                Log.d(TAG, "onTouch: width=" + mRect.width() + " left=" + mRect.right);
+                left = clamp(x - radius, 0, mRect.right);
+                top = clamp(y - radius, 0, mRect.bottom);
+                right = clamp(x + radius, 0, mRect.right);
+                bottom = clamp(y + radius, 0, mRect.bottom);
+                rect = new Rect(left, top, right, bottom);
+                Log.i(TAG, "onTouch: 变换后矩形 " + rect.toString());
                 getPreviewRequestBuilder();
+                mPreviewRequestBuilder.set(CaptureRequest.CONTROL_AF_MODE, CaptureRequest.CONTROL_AF_MODE_AUTO);
                 mPreviewRequestBuilder.set(CaptureRequest.CONTROL_AF_REGIONS, new MeteringRectangle[]{new MeteringRectangle(rect, 1000)});
                 mPreviewRequestBuilder.set(CaptureRequest.CONTROL_AE_REGIONS, new MeteringRectangle[]{new MeteringRectangle(rect, 1000)});
-                mPreviewRequestBuilder.set(CaptureRequest.CONTROL_AF_MODE, CaptureRequest.CONTROL_AF_MODE_AUTO);
-                mPreviewRequestBuilder.set(CaptureRequest.CONTROL_AF_TRIGGER, CameraMetadata.CONTROL_AF_TRIGGER_START);
-                mPreviewRequestBuilder.set(CaptureRequest.CONTROL_AE_PRECAPTURE_TRIGGER, CameraMetadata.CONTROL_AE_PRECAPTURE_TRIGGER_START);
+//                mPreviewRequestBuilder.set(CaptureRequest.CONTROL_AF_TRIGGER, CameraMetadata.CONTROL_AF_TRIGGER_START);
+//                mPreviewRequestBuilder.set(CaptureRequest.CONTROL_AE_PRECAPTURE_TRIGGER, CameraMetadata.CONTROL_AE_PRECAPTURE_TRIGGER_START);
                 repeatPreview();
+                //触发对焦
+                mPreviewRequestBuilder.set(CaptureRequest.CONTROL_AF_TRIGGER,CaptureRequest.CONTROL_AF_TRIGGER_START);
+                try {
+                    //触发对焦通过capture发送请求, 因为用户点击屏幕后只需触发一次对焦
+                    mCaptureSession.capture(mPreviewRequestBuilder.build(), mPreviewCaptureCallback, mCameraHandler);
+                } catch (CameraAccessException e) {
+                    e.printStackTrace();
+                }
                 return false;
             }
         };
@@ -410,6 +434,8 @@ public class MainActivity extends AppCompatActivity {
                         // endregion
                     }
                     mRepeatCaptureCount++;
+                } else {
+                    Log.d(TAG, "onCaptureCompleted: 非预览");
                 }
             }
 
@@ -418,6 +444,16 @@ public class MainActivity extends AppCompatActivity {
                 // Log.d(TAG, "onCaptureProgressed: 过程中 会一直打印");
             }
         };
+    }
+
+    private int clamp(int x, int min, int max) {
+        if (x > max) {
+            return max;
+        }
+        if (x < min) {
+            return min;
+        }
+        return x;
     }
 
     // 创建保存图片的线程
@@ -533,6 +569,9 @@ public class MainActivity extends AppCompatActivity {
                 Log.d(TAG, "setupCamera: 相机传感器方向=" + mSensorOrientation);
                 mNeedRotation = mSensorOrientation;
 
+                mRect = characteristics.get(CameraCharacteristics.SENSOR_INFO_ACTIVE_ARRAY_SIZE);
+                Log.d(TAG, "setupCamera: 相机坐标 "+ mRect.toString());
+
                 //获取StreamConfigurationMap，它是管理摄像头支持的所有输出格式和尺寸
                 StreamConfigurationMap map = characteristics.get(CameraCharacteristics.SCALER_STREAM_CONFIGURATION_MAP);
                 //根据TextureView的尺寸设置预览尺寸
@@ -632,23 +671,6 @@ public class MainActivity extends AppCompatActivity {
      * getOptimalSize: 1280x960
      * getOptimalSize: 1280x768
      * getOptimalSize: 1280x720
-     * getOptimalSize: 1200x1200
-     * getOptimalSize: 1280x480
-     * getOptimalSize: 1280x400
-     * getOptimalSize: 1024x768
-     * getOptimalSize: 800x600
-     * getOptimalSize: 864x480
-     * getOptimalSize: 800x480
-     * getOptimalSize: 720x480
-     * getOptimalSize: 640x480
-     * getOptimalSize: 640x360
-     * 02-01 22:53:44.046 18670-18670/com.example.yuan.camera2 I/Camera2: getOptimalSize: 480x640
-     * getOptimalSize: 480x360
-     * getOptimalSize: 480x320
-     * getOptimalSize: 352x288
-     * getOptimalSize: 320x240
-     * getOptimalSize: 240x320
-     * getOptimalSize: 176x144
      */
     //endregion
     public Size getOptimalSize(Size[] sizes, int width, int height) {
