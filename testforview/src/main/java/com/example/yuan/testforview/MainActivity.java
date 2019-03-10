@@ -1,6 +1,7 @@
 package com.example.yuan.testforview;
 
 import android.animation.ObjectAnimator;
+import android.content.Intent;
 import android.support.v7.app.AppCompatActivity;
 import android.os.Bundle;
 import android.util.Log;
@@ -30,6 +31,13 @@ public class MainActivity extends AppCompatActivity {
                 testGet();
             }
         });
+        findViewById(R.id.button3).setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                startActivity(new Intent(MainActivity.this, MatrixActivity.class));
+            }
+        });
+        findViewById(R.id.button3).performClick();
     }
 
     void testGet() {
