@@ -58,11 +58,14 @@ public class MainActivity extends AppCompatActivity {
     private static final int REQUEST_CODE = 500;
 
     private String mCameraId;
+    private int[] mCameraIdInt;
+    private CameraCharacteristics[] mCameraCharacteristicArrays;
     private CameraDevice mCameraDevice;
     private CameraDevice.StateCallback mStateCallback;
     private CameraCaptureSession mCaptureSession;
     private int mDeviceOrientation;
-    private boolean mPause = false;
+    private boolean mPause;
+    private boolean mNeedOpen;
 
     private int mDisplayOrientation;
     private int mNeedRotation;
@@ -84,9 +87,9 @@ public class MainActivity extends AppCompatActivity {
 
     // 预览
     private TextureView mPreviewTextureView;
+    private Surface mPreviewSurface;
     private TextureView.SurfaceTextureListener mTextureListener;
     private Size mPreviewSize;
-    private Surface mPreviewSurface;
     private CaptureRequest.Builder mPreviewRequestBuilder;
     private CaptureRequest mPreviewRequest;
     private CameraCaptureSession.CaptureCallback mPreviewCaptureCallback;
@@ -186,7 +189,13 @@ public class MainActivity extends AppCompatActivity {
         Log.i(TAG, "onResume: 线程名 " + Thread.currentThread().getName());
         super.onResume();
         mPause = false;
-        mPreviewTextureView.setSurfaceTextureListener(mTextureListener);
+        if (mPreviewTextureView2.isAvailable()) {
+            Log.d(TAG, "onResume: mPreviewTextureView2 可用");
+            mCameraHandler.sendMessage(mCameraHandler.obtainMessage(MSG_OPEN_CAMERA));
+        } else {
+            Log.d(TAG, "onResume: mPreviewTextureView2 不可用");
+            mPreviewTextureView2.setSurfaceTextureListener(mTextureListener);
+        }
         mPreviewTextureView.setAlpha(0);
         hideSystemBars();
     }
@@ -196,6 +205,7 @@ public class MainActivity extends AppCompatActivity {
         Log.i(TAG, "onPause: ");
         super.onPause();
         mPause = true;
+        mNeedOpen = true;
         if (mCameraDevice != null) {
             mCameraDevice.close();
         } else {
@@ -229,7 +239,12 @@ public class MainActivity extends AppCompatActivity {
             public void handleMessage(Message msg) {
                 switch (msg.what) {
                     case MSG_OPEN_CAMERA:
-                        openCamera();
+                        if (mNeedOpen) {
+                            mNeedOpen = false;
+                            openCamera();
+                        } else {
+                            Log.d(TAG, "handleMessage: 不需要再openCamera");
+                        }
                         break;
                     case MSG_CLOSE_CAMERA:
                         if (mCameraDevice != null) {
@@ -325,7 +340,7 @@ public class MainActivity extends AppCompatActivity {
 //                mPreviewRequestBuilder.set(CaptureRequest.CONTROL_AE_PRECAPTURE_TRIGGER, CameraMetadata.CONTROL_AE_PRECAPTURE_TRIGGER_START);
                 repeatPreview();
                 //触发对焦
-                mPreviewRequestBuilder.set(CaptureRequest.CONTROL_AF_TRIGGER,CaptureRequest.CONTROL_AF_TRIGGER_START);
+                mPreviewRequestBuilder.set(CaptureRequest.CONTROL_AF_TRIGGER, CaptureRequest.CONTROL_AF_TRIGGER_START);
                 try {
                     //触发对焦通过capture发送请求, 因为用户点击屏幕后只需触发一次对焦
                     mCaptureSession.capture(mPreviewRequestBuilder.build(), mPreviewCaptureCallback, mCameraHandler);
@@ -362,10 +377,15 @@ public class MainActivity extends AppCompatActivity {
             public void onSurfaceTextureUpdated(SurfaceTexture surface) {
                 // Log.d(TAG, "onSurfaceTextureUpdated: 会一直打印");
                 /*
-                 * 1. 预览启动后该方法被一直调用的原因是setRepeatingRequest导致onCaptureCompleted被一直调用，
-                 *    及与其对应的target连接的surface
-                 * 2. 从Activity的onPause()后到相机onClosed()后只会调用一次该方法
-                 * 3. 在onPause()后的onResume()在 mCameraDevice==null 条件下只会调用一次该方法
+                 * 1. 预览启动后该方法一直被调用的原因是setRepeatingRequest导致onCaptureCompleted一直被调用，
+                 *    及与其target连接的surface一直被调用
+                 * 2. Home Recent Power 从 onPause 到 onResume 对 TextureView 生命周期的影响：
+                 *    ① Home 的 onPause：onClosed onSurfaceTextureUpdated onSurfaceTextureDestroyed
+                 *       Home 的 onResume：onSurfaceTextureAvailable  openCamera
+                 *    ② Recent 的 onPause：onClosed onSurfaceTextureDestroyed
+                 *       Recent 的 onResume：onSurfaceTextureAvailable onSurfaceTextureUpdated openCamera
+                 *    ③ Power 的 onPause：onClosed onSurfaceTextureUpdated
+                 *       Power 的 onResume：isAvailable openCamera
                  * */
                 if (mPause) {
                     Log.d(TAG, "onSurfaceTextureUpdated: onPause() 执行一次");
@@ -551,16 +571,21 @@ public class MainActivity extends AppCompatActivity {
         try {
             //遍历所有摄像头
             assert manager != null;
+            mCameraCharacteristicArrays = new CameraCharacteristics[manager.getCameraIdList().length];
+            mCameraIdInt = new int[manager.getCameraIdList().length];
             for (String cameraId : manager.getCameraIdList()) {
                 CameraCharacteristics characteristics = manager.getCameraCharacteristics(cameraId);
 
-                Log.d(TAG, "setupCamera: 打开相机前 查看相机的参数");
+                Log.d(TAG, "setupCamera: 打开相机前 查看相机的参数 " + cameraId);
+                mCameraIdInt[Integer.parseInt(cameraId)] = Integer.parseInt(cameraId);
+                mCameraCharacteristicArrays[Integer.parseInt(cameraId)] = characteristics;
 
                 //默认打开后置摄像头
                 Integer lensFacing = characteristics.get(CameraCharacteristics.LENS_FACING);
                 if (lensFacing != null && lensFacing == CameraCharacteristics.LENS_FACING_FRONT) {
                     continue;
                 }
+                mCameraId = cameraId;
 
                 Integer hardwareLevel = characteristics.get(CameraCharacteristics.INFO_SUPPORTED_HARDWARE_LEVEL);
                 Log.d(TAG, "setupCamera: 相机支持的等级（0是最低级）=" + hardwareLevel);
@@ -570,7 +595,12 @@ public class MainActivity extends AppCompatActivity {
                 mNeedRotation = mSensorOrientation;
 
                 mRect = characteristics.get(CameraCharacteristics.SENSOR_INFO_ACTIVE_ARRAY_SIZE);
-                Log.d(TAG, "setupCamera: 相机坐标 "+ mRect.toString());
+                Log.d(TAG, "setupCamera: 相机坐标 " + mRect.toString());
+
+                // 均为null，说明不支持？？？
+                Float min = characteristics.get(CameraCharacteristics.LENS_INFO_MINIMUM_FOCUS_DISTANCE);
+                Integer cal = characteristics.get(CameraCharacteristics.LENS_INFO_FOCUS_DISTANCE_CALIBRATION);
+                Log.d(TAG, "setupCamera: 焦距 " + min + " " + cal);
 
                 //获取StreamConfigurationMap，它是管理摄像头支持的所有输出格式和尺寸
                 StreamConfigurationMap map = characteristics.get(CameraCharacteristics.SCALER_STREAM_CONFIGURATION_MAP);
@@ -580,7 +610,6 @@ public class MainActivity extends AppCompatActivity {
                 height = mPreviewTextureView2.getHeight();
                 mPreviewSize = getOptimalSize(map.getOutputSizes(SurfaceTexture.class), width, height);
                 Log.d(TAG, "setupCamera: mPreviewSize=" + mPreviewSize.toString());
-                mCameraId = cameraId;
 
                 boolean outputSupportedFor = map.isOutputSupportedFor(ImageFormat.YUV_420_888);
                 Log.i(TAG, "setupCamera: 是否支持YUV_420_888 " + outputSupportedFor);
@@ -600,7 +629,6 @@ public class MainActivity extends AppCompatActivity {
                 });
                 Log.d(TAG, "setupCamera: mCaptureSize=" + mCaptureSize.toString());
 
-                break;
             }
         } catch (CameraAccessException e) {
             e.printStackTrace();
@@ -705,7 +733,7 @@ public class MainActivity extends AppCompatActivity {
             e.printStackTrace();
         }
         //设置预览的显示界面
-        mPreviewRequestBuilder.addTarget(mPreviewSurface);
+//        mPreviewRequestBuilder.addTarget(mPreviewSurface);
         // 多预览
         mPreviewRequestBuilder.addTarget(mPreviewSurface2);
 //        mPreviewRequestBuilder.addTarget(mPreviewImageReader.getSurface());
