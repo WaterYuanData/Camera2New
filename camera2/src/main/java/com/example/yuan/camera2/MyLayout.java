@@ -15,7 +15,7 @@ public class MyLayout extends FrameLayout {
     private static final String TAG = "MyLayout";
     private float mEventX;
     private float mEventY;
-    private int mRadius = 100;
+    private int mRadius = 200;
     private int mStrokeWidth = 4;
     private Paint mPaint;
 
