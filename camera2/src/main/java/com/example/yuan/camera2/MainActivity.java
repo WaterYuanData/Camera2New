@@ -108,14 +108,27 @@ public class MainActivity extends AppCompatActivity {
     private Handler mCameraHandler;
     private static final int MSG_OPEN_CAMERA = 1;
     private static final int MSG_PICTURE_SAVED = 10;
-    private static final int MSG_PREVIEW_STARTED = 2;
     private ImageView mThumbnail;
     private MyLayout mMyLayout;
     private Rect mRect;
+    private float mEventX;
+    private float mEventY;
     private static final String TAG_PREVIEW = "预览";
-    private static final String TAG_FOCUS = "对焦";
+    private static final String TAG_TOUCH_FOCUS = "手动对焦";
+    private static final String TAG_TOUCH_PREVIEW = "手动预览";
+    private static final String TAG_AUTO_FOCUS = "自动对焦";
+    private static final String TAG_TAKE_PICTURE = "拍照";
     private MeteringRectangle[] mMeteringRectangles;
+    private MeteringRectangle[] mInitMeteringRectangles;
     private Integer mFocusState;
+    private int mState = STATE_PREVIEW;
+    private static final int STATE_PREVIEW = 0;
+    private static final int STATE_WAITING_LOCK = 1;
+    private static final int STATE_PICTURE_TAKEN = 4;
+    private static final int STATE_WAITING_UNLOCK = 5;
+    private String tag;
+    private int mAfs;
+    private boolean mIsCompleted;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -258,9 +271,6 @@ public class MainActivity extends AppCompatActivity {
                             }
                         });
                         break;
-                    case MSG_PREVIEW_STARTED:
-                        Log.i(TAG, "handleMessage: 预览已开启");
-                        break;
                 }
 
             }
@@ -271,11 +281,11 @@ public class MainActivity extends AppCompatActivity {
             public void onClick(View v) {
                 switch (v.getId()) {
                     case R.id.takePicture:
-                        Log.d(TAG, "onClick: 拍照");
+                        Log.d(TAG, "onClick: 直接拍照");
                         capture();
                         break;
                     case R.id.button2:
-                        Log.d(TAG, "onClick: 拍照2");
+                        Log.d(TAG, "onClick: 对焦后拍照");
                         takeCapture();
                         break;
                 }
@@ -297,15 +307,25 @@ public class MainActivity extends AppCompatActivity {
                 // 相对于手机自然状态即竖屏的左上顶点的坐标
                 float eventX = event.getX();
                 float eventY = event.getY();
-                Log.i(TAG, "onTouch: eventX=" + eventX + " eventY=" + eventY);
-                mMyLayout.setEventX(eventX);
-                mMyLayout.setEventY(eventY);
-                mMyLayout.invalidate();
-                //
+                int action = event.getAction();
+                double sqrt = Math.sqrt(Math.abs(mEventX - eventX) * Math.abs(mEventX - eventX) + Math.abs(mEventY - eventY) * Math.abs(mEventY - eventY));
+                Log.i(TAG, "onTouch: eventX=" + eventX + " eventY=" + eventY + " action=" + action + " sqrt=" + sqrt);
                 int width = mMyLayout.getWidth();
                 int height = mMyLayout.getHeight();
                 int radius = mMyLayout.getRadius();
                 Log.i(TAG, "onTouch: width=" + width + " height=" + height + " radius=" + radius);
+                if (sqrt < 50) {
+                    return false;
+                }
+                if (height - eventY < 200) {
+                    return false;
+                }
+                mEventX = eventX;
+                mEventY = eventY;
+                mMyLayout.setEventX(eventX);
+                mMyLayout.setEventY(eventY);
+                mMyLayout.setVisible(true);
+                //
                 int left = (int) (eventX - radius);
                 int top = (int) (eventY - radius);
                 int right = (int) (eventX + radius);
@@ -328,26 +348,31 @@ public class MainActivity extends AppCompatActivity {
                 bottom = clamp(y + radius, 0, mRect.bottom);
                 rect = new Rect(left, top, right, bottom);
                 Log.i(TAG, "onTouch: 变换后矩形 " + rect.toString());
-                getPreviewRequestBuilder();
-                mPreviewRequestBuilder.set(CaptureRequest.CONTROL_AF_MODE, CaptureRequest.CONTROL_AF_MODE_AUTO);
-                mPreviewRequestBuilder.set(CaptureRequest.CONTROL_AE_MODE, CaptureRequest.CONTROL_AE_MODE_ON);
                 mMeteringRectangles = new MeteringRectangle[]{new MeteringRectangle(rect, 1)};
-                mPreviewRequestBuilder.set(CaptureRequest.CONTROL_AF_REGIONS, mMeteringRectangles);
-                mPreviewRequestBuilder.set(CaptureRequest.CONTROL_AE_REGIONS, mMeteringRectangles);
-//                mPreviewRequestBuilder.set(CaptureRequest.CONTROL_AF_TRIGGER, CameraMetadata.CONTROL_AF_TRIGGER_START);
-//                mPreviewRequestBuilder.set(CaptureRequest.CONTROL_AE_PRECAPTURE_TRIGGER, CameraMetadata.CONTROL_AE_PRECAPTURE_TRIGGER_START);
-                repeatPreview();
-                //触发对焦
-                mPreviewRequestBuilder.set(CaptureRequest.CONTROL_AF_TRIGGER, CaptureRequest.CONTROL_AF_TRIGGER_START);
-                mPreviewRequestBuilder.set(CaptureRequest.FLASH_MODE, CaptureRequest.FLASH_MODE_TORCH);
+                CaptureRequest.Builder touchFocusRequestBuilder = getPreviewRequestBuilder();
+                touchFocusRequestBuilder.set(CaptureRequest.CONTROL_AF_MODE, CaptureRequest.CONTROL_AF_MODE_AUTO);// 默认是CONTINUOUS_PICTURE,所以必须修改
+                touchFocusRequestBuilder.set(CaptureRequest.CONTROL_AF_TRIGGER, CaptureRequest.CONTROL_AF_TRIGGER_START);
+                //触发对焦,可否同时触发CONTROL_AE_PRECAPTURE_TRIGGER???
+                touchFocusRequestBuilder.set(CaptureRequest.CONTROL_AE_PRECAPTURE_TRIGGER, CaptureRequest.CONTROL_AE_PRECAPTURE_TRIGGER_START);
+                touchFocusRequestBuilder.set(CaptureRequest.CONTROL_AF_REGIONS, mMeteringRectangles);
+                touchFocusRequestBuilder.set(CaptureRequest.CONTROL_AE_REGIONS, mMeteringRectangles);
+                // touchFocusRequestBuilder.set(CaptureRequest.FLASH_MODE, CaptureRequest.FLASH_MODE_TORCH);
                 try {
                     //触发对焦通过capture发送请求, 因为用户点击屏幕后只需触发一次对焦
-                    mPreviewRequestBuilder.setTag(TAG_FOCUS);
-                    mCaptureSession.capture(mPreviewRequestBuilder.build(), mPreviewCaptureCallback, mCameraHandler);
+                    touchFocusRequestBuilder.setTag(TAG_TOUCH_FOCUS);
+                    mState = STATE_WAITING_LOCK;
+                    mCaptureSession.capture(touchFocusRequestBuilder.build(), mPreviewCaptureCallback, mCameraHandler);// 手动对焦
                 } catch (CameraAccessException e) {
                     e.printStackTrace();
                 }
-                return false;
+                lockFocusToPreview();
+                mCameraHandler.postDelayed(new Runnable() {
+                    @Override
+                    public void run() {
+                        mState = STATE_WAITING_UNLOCK;
+                    }
+                }, 2000);
+                return true;
             }
         };
         mMyLayout.setOnTouchListener(onTouchListener);
@@ -430,70 +455,85 @@ public class MainActivity extends AppCompatActivity {
             @Override
             public void onCaptureCompleted(@NonNull CameraCaptureSession session, @NonNull CaptureRequest request, @NonNull TotalCaptureResult result) {
                 // Log.d(TAG, "onCaptureCompleted: 完成 会一直打印"); 导致onSurfaceTextureUpdated被一直打印
-                if (request == mPreviewRequest) { // 已验证可行
-                    if (mRepeatCaptureCount % 200 == 0) { // 200次大约10秒
-                        if (mRepeatCaptureCount == 0) {
-                            mCameraHandler.sendMessage(mCameraHandler.obtainMessage(MainActivity.MSG_PREVIEW_STARTED));
-                            Log.d(TAG, "onCaptureCompleted: 预览已启动 ");
-                        }
+                if (mRepeatCaptureCount == 0) {
+                    Log.e(TAG, "onCaptureCompleted: 预览已启动 ");
 
-                        Log.d(TAG, "onCaptureCompleted: 验证hashCode值 " + request);
-                        Log.d(TAG, "onCaptureCompleted: mRepeatCaptureCount=" + mRepeatCaptureCount);
-                        Integer requestOrientation = request.get(CaptureRequest.JPEG_ORIENTATION);
-                        Integer resultOrientation = result.get(CaptureResult.JPEG_ORIENTATION);
-//                        Log.d(TAG, "onCaptureCompleted: requestOrientation=" + requestOrientation + " resultOrientation=" + resultOrientation);
-
-                        MeteringRectangle[] meteringRectangles = result.get(CaptureResult.CONTROL_AF_REGIONS);
-                        for (int i = 0; i < meteringRectangles.length; i++) {
-                            Log.d(TAG, "onCaptureCompleted: 对焦区域=" + meteringRectangles[i].toString());
-                        }
-                        mMeteringRectangles = meteringRectangles;
-
-                        Pair<Float, Float> floatFloatPair = result.get(CaptureResult.LENS_FOCUS_RANGE);
-                        if (floatFloatPair != null) {
-                            Log.d(TAG, "onCaptureCompleted: 预览中LENS_FOCUS_RANGE=" + floatFloatPair.toString());
-                        }
-
+                    MeteringRectangle[] meteringRectangles = result.get(CaptureResult.CONTROL_AF_REGIONS);
+                    for (int i = 0; i < meteringRectangles.length; i++) {
+                        Log.d(TAG, "onCaptureCompleted: 对焦区域=" + meteringRectangles[i].toString());
                     }
-                    mRepeatCaptureCount++;
-                    updateState(result, true);
-                } else {
-                    Log.d(TAG, "onCaptureCompleted: 非预览");
-                    if (request.getTag().equals(TAG_FOCUS)) {
-                        Log.d(TAG, "onCaptureCompleted: 对焦状态=" + result.get(CaptureResult.CONTROL_AF_STATE));// ACTIVE_SCAN
+
+                    Pair<Float, Float> floatFloatPair = result.get(CaptureResult.LENS_FOCUS_RANGE);
+                    if (floatFloatPair != null) {
+                        Log.d(TAG, "onCaptureCompleted: 焦距范围=" + floatFloatPair.toString());
                     }
                 }
+                mRepeatCaptureCount++;
+                if (request == mPreviewRequest) { // 已验证可行,但没必要
+                }
+                updateFocusState(result, true);
+                updateState(result, true);
             }
 
-            private void updateState(CaptureResult result,boolean isPreview) {
+            private void updateState(CaptureResult result, boolean isCompleted) {
                 Integer afState = result.get(CaptureResult.CONTROL_AF_STATE);
-                if (isPreview) {
-                    if (mFocusState == afState) {
-                        return;
-                    }
-                    mFocusState = afState;
+                if (!((String) result.getRequest().getTag()).equalsIgnoreCase(tag)) {
+                    tag = (String) result.getRequest().getTag();
+                    mAfs = afState;
+                    Log.e(TAG, "updateState: " + result.getRequest().getTag() + (isCompleted ? " 结果 " : " 过程中 ") + afState);
+                } else if (mAfs != afState) {
+                    mAfs = afState;
+                    Log.d(TAG, "updateState: " + result.getRequest().getTag() + (isCompleted ? " 结果 " : " 过程中 ") + afState);
                 }
+                switch (mState) {
+                    case STATE_PREVIEW:
+                        break;
+                    case STATE_WAITING_LOCK:
+                        if (afState == CaptureRequest.CONTROL_AF_STATE_FOCUSED_LOCKED) {
+                            Log.e(TAG, "updateState: 对焦成功");
+                            mState = STATE_PREVIEW;
+                        }
+                        break;
+                    case STATE_WAITING_UNLOCK:
+                        unLockFocus();
+                        break;
+                }
+
+            }
+
+            private void updateFocusState(CaptureResult result, boolean isCompleted) {
+                Integer afState = result.get(CaptureResult.CONTROL_AF_STATE);
+                if (afState == null) {
+                    return;
+                }
+                String TAG = (String) result.getRequest().getTag();
+                TAG += isCompleted ? " 结果" : " 过程中";
+                if (mFocusState == afState) {
+                    return;
+                }
+                mFocusState = afState;
                 switch (afState) {
                     case CaptureRequest.CONTROL_AF_STATE_INACTIVE:
-                        Log.d(TAG, "updateState: 0 ");
+                        Log.d(TAG, "updateFocusState: 0 ");
                         break;
                     case CaptureRequest.CONTROL_AF_STATE_PASSIVE_SCAN:
-                        Log.d(TAG, "updateState: 1 被动扫描");
+                        Log.d(TAG, "updateFocusState: 1 自动扫描");
                         break;
                     case CaptureRequest.CONTROL_AF_STATE_PASSIVE_FOCUSED:
-                        Log.d(TAG, "updateState: 2 被动对焦成功 此时焦距=" + result.get(CaptureResult.LENS_FOCUS_DISTANCE));
+                        Log.d(TAG, "updateFocusState: 2 自动对焦成功 此时焦距=" + result.get(CaptureResult.LENS_FOCUS_DISTANCE));
                         break;
                     case CaptureRequest.CONTROL_AF_STATE_ACTIVE_SCAN:
-                        Log.d(TAG, "updateState: 3 主动扫描");
+                        Log.d(TAG, "updateFocusState: 3 手动对焦 扫描中");
                         break;
                     case CaptureRequest.CONTROL_AF_STATE_FOCUSED_LOCKED:
-                        Log.d(TAG, "updateState: 4 ");
+                        Log.d(TAG, "updateFocusState: 4 手动对焦 成功 已锁焦");
+                        // unLockFocus();
                         break;
                     case CaptureRequest.CONTROL_AF_STATE_NOT_FOCUSED_LOCKED:
-                        Log.d(TAG, "updateState: 5 ");
+                        Log.d(TAG, "updateFocusState: 5 ");
                         break;
                     case CaptureRequest.CONTROL_AF_STATE_PASSIVE_UNFOCUSED:
-                        Log.d(TAG, "updateState: 6 ");
+                        Log.d(TAG, "updateFocusState: 6 ");
                         break;
                 }
             }
@@ -501,6 +541,9 @@ public class MainActivity extends AppCompatActivity {
             @Override
             public void onCaptureProgressed(@NonNull CameraCaptureSession session, @NonNull CaptureRequest request, @NonNull CaptureResult partialResult) {
                 // Log.d(TAG, "onCaptureProgressed: 过程中 会一直打印");
+                // todo
+                // updateFocusState(partialResult, false);
+                // updateState(partialResult, false);
             }
         };
     }
@@ -564,14 +607,52 @@ public class MainActivity extends AppCompatActivity {
     }
 
     public void takeCapture() {
-        getPreviewRequestBuilder();// 拍照2
+        // getPreviewRequestBuilder();// 拍照2
         initBuilder();
         // todo
     }
 
-    private void initBuilder() {
+    private void lockFocusToPreview() {
+        mPreviewRequestBuilder.setTag("更新 预览的对焦区域");
         mPreviewRequestBuilder.set(CaptureRequest.CONTROL_AF_MODE, CaptureRequest.CONTROL_AF_MODE_AUTO);
-        mPreviewRequestBuilder.set(CaptureRequest.CONTROL_AE_MODE, CaptureRequest.CONTROL_AE_MODE_ON);
+        mPreviewRequestBuilder.set(CaptureRequest.CONTROL_AF_REGIONS, mMeteringRectangles);
+        mPreviewRequestBuilder.set(CaptureRequest.CONTROL_AE_REGIONS, mMeteringRectangles);
+        try {
+            mCaptureSession.stopRepeating();
+            mPreviewRequest = mPreviewRequestBuilder.build();
+            Log.e(TAG, "lockFocusToPreview: 相等=" + (mPreviewRequest == mPreviewRequestBuilder.build()));// false
+            mCaptureSession.setRepeatingRequest(mPreviewRequest, mPreviewCaptureCallback, mCameraHandler);
+        } catch (CameraAccessException e) {
+            e.printStackTrace();
+        }
+    }
+
+    private void unLockFocus() {
+        mMyLayout.setVisible(false);
+        Log.d(TAG, "unLockFocus: ");
+        // CaptureRequest.Builder unLockFocusRequestBuilder = getPreviewRequestBuilder();
+        // unLockFocusRequestBuilder.setTag("解除锁焦");
+        // unLockFocusRequestBuilder.set(CaptureRequest.CONTROL_AF_TRIGGER, CaptureRequest.CONTROL_AF_TRIGGER_CANCEL);
+        // unLockFocusRequestBuilder.set(CaptureRequest.CONTROL_AE_PRECAPTURE_TRIGGER, CaptureRequest.CONTROL_AE_PRECAPTURE_TRIGGER_CANCEL);
+        // unLockFocusRequestBuilder.set(CaptureRequest.FLASH_MODE, CaptureRequest.FLASH_MODE_OFF);
+        // try {
+        //     mCaptureSession.capture(unLockFocusRequestBuilder.build(), mPreviewCaptureCallback, mCameraHandler);// 解锁,不是必须,因为mPreviewRequestBuilder默认会关闭trigger
+        // } catch (CameraAccessException e) {
+        //     e.printStackTrace();
+        // }
+        mPreviewRequestBuilder.setTag("重置 预览的对焦区域");
+        mState = STATE_PREVIEW;
+        mPreviewRequestBuilder.set(CaptureRequest.CONTROL_AF_MODE, CaptureRequest.CONTROL_AF_MODE_CONTINUOUS_PICTURE);
+        mPreviewRequestBuilder.set(CaptureRequest.CONTROL_AF_REGIONS, mInitMeteringRectangles);
+        mPreviewRequestBuilder.set(CaptureRequest.CONTROL_AE_REGIONS, mInitMeteringRectangles);
+        try {
+            mCaptureSession.setRepeatingRequest(mPreviewRequestBuilder.build(), mPreviewCaptureCallback, mCameraHandler);
+        } catch (CameraAccessException e) {
+            e.printStackTrace();
+        }
+    }
+
+    private void initBuilder() {
         if (mMeteringRectangles != null) {
             mPreviewRequestBuilder.set(CaptureRequest.CONTROL_AF_REGIONS, mMeteringRectangles);
             mPreviewRequestBuilder.set(CaptureRequest.CONTROL_AE_REGIONS, mMeteringRectangles);
@@ -647,19 +728,23 @@ public class MainActivity extends AppCompatActivity {
                 Log.d(TAG, "setupCamera: 相机支持的等级（0是最低级）=" + hardwareLevel);//2
 
                 Boolean flashAvaliable = characteristics.get(CameraCharacteristics.FLASH_INFO_AVAILABLE);
-                Log.d(TAG, "takeCapture: 支持闪光 " + flashAvaliable);
+                Log.d(TAG, "setupCamera: 支持闪光 " + flashAvaliable);
 
                 mSensorOrientation = characteristics.get(CameraCharacteristics.SENSOR_ORIENTATION);
                 Log.d(TAG, "setupCamera: 相机传感器方向=" + mSensorOrientation);
                 mNeedRotation = mSensorOrientation;
 
                 mRect = characteristics.get(CameraCharacteristics.SENSOR_INFO_ACTIVE_ARRAY_SIZE);
-                Log.d(TAG, "setupCamera: 相机坐标 " + mRect.toString());
+                Log.d(TAG, "setupCamera: 相机坐标系 " + mRect.toString());
 
-                // 均为null，说明不支持？？？
-                Float min = characteristics.get(CameraCharacteristics.LENS_INFO_MINIMUM_FOCUS_DISTANCE);
-                Integer cal = characteristics.get(CameraCharacteristics.LENS_INFO_FOCUS_DISTANCE_CALIBRATION);
-                Log.d(TAG, "setupCamera: 焦距 " + min + " " + cal);
+                Float hyperfocal = characteristics.get(CameraCharacteristics.LENS_INFO_HYPERFOCAL_DISTANCE);
+                Float minimum = characteristics.get(CameraCharacteristics.LENS_INFO_MINIMUM_FOCUS_DISTANCE);
+                Integer callibration = characteristics.get(CameraCharacteristics.LENS_INFO_FOCUS_DISTANCE_CALIBRATION);
+                float[] floats = characteristics.get(CameraCharacteristics.LENS_INFO_AVAILABLE_FOCAL_LENGTHS);
+                Log.d(TAG, "setupCamera: 焦距信息 hyperfocal=" + hyperfocal + " minimum=" + minimum + " 校准等级=" + callibration);
+                for (int i = 0; i < floats.length; i++) {
+                    Log.d(TAG, "setupCamera: 可用焦距列表 " + floats[i]);
+                }
 
                 //获取StreamConfigurationMap，它是管理摄像头支持的所有输出格式和尺寸
                 StreamConfigurationMap map = characteristics.get(CameraCharacteristics.SCALER_STREAM_CONFIGURATION_MAP);
@@ -790,35 +875,41 @@ public class MainActivity extends AppCompatActivity {
         }
     }
 
-    private void getPreviewRequestBuilder() {
+    private CaptureRequest.Builder getPreviewRequestBuilder() {
         //创建请求的Builder，TEMPLATE_PREVIEW表示预览请求
+        CaptureRequest.Builder builder = null;
         try {
-            mPreviewRequestBuilder = mCameraDevice.createCaptureRequest(CameraDevice.TEMPLATE_PREVIEW);
+            builder = mCameraDevice.createCaptureRequest(CameraDevice.TEMPLATE_PREVIEW);
         } catch (CameraAccessException e) {
             e.printStackTrace();
         }
         //设置预览的显示界面
 //        mPreviewRequestBuilder.addTarget(mPreviewSurface);
         // 多预览
-        mPreviewRequestBuilder.addTarget(mPreviewSurface2);
+        builder.addTarget(mPreviewSurface2);
 //        mPreviewRequestBuilder.addTarget(mPreviewImageReader.getSurface());
-        Log.d(TAG, "getPreviewRequestBuilder: hashCode=" + mPreviewRequestBuilder);
-        Log.e(TAG, "getPreviewRequestBuilder: 3A总开关(1为AUTO)=" + mPreviewRequestBuilder.get(CaptureRequest.CONTROL_MODE));
-        Log.d(TAG, "getPreviewRequestBuilder: AF_TRIGGER=" + mPreviewRequestBuilder.get(CaptureRequest.CONTROL_AF_TRIGGER));
-        Log.d(TAG, "getPreviewRequestBuilder: AF_MODE=" + mPreviewRequestBuilder.get(CaptureRequest.CONTROL_AF_MODE));
-        Log.d(TAG, "getPreviewRequestBuilder: AE_MODE=" + mPreviewRequestBuilder.get(CaptureRequest.CONTROL_AE_MODE));
-        Log.d(TAG, "getPreviewRequestBuilder: AWB_MODE=" + mPreviewRequestBuilder.get(CaptureRequest.CONTROL_AWB_MODE));
-        MeteringRectangle[] meteringRectangles = mPreviewRequestBuilder.get(CaptureRequest.CONTROL_AF_REGIONS);
+        Log.e(TAG, "getPreviewRequestBuilder: 3A总开关(1为AUTO)=" + builder.get(CaptureRequest.CONTROL_MODE));
+        Log.d(TAG, "getPreviewRequestBuilder: hashCode=" + builder);
+        Log.d(TAG, "getPreviewRequestBuilder: AF_TRIGGER=" + builder.get(CaptureRequest.CONTROL_AF_TRIGGER));
+        Log.d(TAG, "getPreviewRequestBuilder: AF_MODE=" + builder.get(CaptureRequest.CONTROL_AF_MODE));
+        Log.d(TAG, "getPreviewRequestBuilder: AE_MODE=" + builder.get(CaptureRequest.CONTROL_AE_MODE));
+        Log.d(TAG, "getPreviewRequestBuilder: AWB_MODE=" + builder.get(CaptureRequest.CONTROL_AWB_MODE));
+        MeteringRectangle[] meteringRectangles = builder.get(CaptureRequest.CONTROL_AF_REGIONS);
         if (meteringRectangles != null && meteringRectangles.length > 0) {
-            Log.d(TAG, "getPreviewRequestBuilder: AF_REGIONS=" + meteringRectangles[0].getRect().toString());
+            Log.d(TAG, "getPreviewRequestBuilder: 对焦区域 AF_REGIONS=" + meteringRectangles[0].toString());
+            Log.d(TAG, "getPreviewRequestBuilder: 对焦坐标 AF_REGIONS=" + meteringRectangles[0].getRect().toString());
         }
-        // 这俩本身就是默认的，可不设
-        mPreviewRequestBuilder.set(CaptureRequest.CONTROL_MODE, CaptureRequest.CONTROL_MODE_AUTO);
-        mPreviewRequestBuilder.set(CaptureRequest.CONTROL_AF_TRIGGER, CaptureRequest.CONTROL_AF_TRIGGER_IDLE);
+        mInitMeteringRectangles = meteringRectangles;// todo 与CaptureResult.CONTROL_AF_REGIONS不同的原因
+
+        meteringRectangles = builder.get(CaptureRequest.CONTROL_AE_REGIONS);
+        if (meteringRectangles != null && meteringRectangles.length > 0) {
+            Log.d(TAG, "getPreviewRequestBuilder: AE_REGIONS=" + meteringRectangles[0].toString());
+            Log.d(TAG, "getPreviewRequestBuilder: AE_REGIONS=" + meteringRectangles[0].getRect().toString());
+        }
+        return builder;
     }
 
     private void repeatPreview() {
-        mPreviewRequestBuilder.setTag(TAG_PREVIEW);
         mPreviewRequest = mPreviewRequestBuilder.build();
         try {
             //设置反复捕获数据的请求，这样预览界面就会一直有数据显示
@@ -827,7 +918,6 @@ public class MainActivity extends AppCompatActivity {
         } catch (CameraAccessException e) {
             e.printStackTrace();
         }
-        Log.d(TAG, "repeatPreview: hashCode=" + mPreviewRequest);
     }
 
     private void startPreview() {
@@ -842,13 +932,13 @@ public class MainActivity extends AppCompatActivity {
 
         // 多预览
         SurfaceTexture surfaceTexture = mPreviewTextureView2.getSurfaceTexture();
-        Log.i(TAG, "startPreview: " + mPreviewTextureView2.getWidth() + "x" + mPreviewTextureView2.getHeight() + " : " + (1.f * mPreviewTextureView2.getHeight() / mPreviewTextureView2.getWidth()));
-        Log.i(TAG, "startPreview: " + mPreviewSize.toString() + " : " + (1.f * mPreviewSize.getWidth() / mPreviewSize.getHeight()));
+        Log.i(TAG, "startPreview: mPreviewTextureView2=" + mPreviewTextureView2.getWidth() + "x" + mPreviewTextureView2.getHeight() + " : " + (1.f * mPreviewTextureView2.getHeight() / mPreviewTextureView2.getWidth()));
+        Log.i(TAG, "startPreview: mPreviewSize=" + mPreviewSize.toString() + " : " + (1.f * mPreviewSize.getWidth() / mPreviewSize.getHeight()));
         surfaceTexture.setDefaultBufferSize(mPreviewSize.getWidth(), mPreviewSize.getHeight());
         mPreviewSurface2 = new Surface(surfaceTexture);
 
         try {
-            getPreviewRequestBuilder();
+            mPreviewRequestBuilder = getPreviewRequestBuilder();// startPreview
 
             // 矫正TextureView预览 已验证只能强制竖屏，否则非强制竖屏如下方法不行，不强制竖屏如何矫正？？？
             Log.i(TAG, "startPreview: 屏幕显示方向=" + mDisplayOrientation + " 需要旋转=" + mNeedRotation);
@@ -870,6 +960,8 @@ public class MainActivity extends AppCompatActivity {
                             Log.i(TAG, "onConfigured: 创建createCaptureSession成功 线程名 " + Thread.currentThread().getName());
                             //预览请求成功后得到预览会话
                             mCaptureSession = session;
+                            mPreviewRequestBuilder.setTag(TAG_PREVIEW);
+                            mState = STATE_PREVIEW;
                             repeatPreview();
                         }
 

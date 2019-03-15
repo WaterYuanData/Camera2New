@@ -42,6 +42,11 @@ public class MyLayout extends FrameLayout {
 //        setOnTouchListener(onTouchListener);
     }
 
+    public void setVisible(boolean visible) {
+        mPaint.setColor(getResources().getColor(visible ? R.color.colorAccent : R.color.transparent));
+        invalidate();
+    }
+
     @Override
     protected void onDraw(Canvas canvas) {
         super.onDraw(canvas); // 空方法
