@@ -115,6 +115,7 @@ public class MainActivity extends AppCompatActivity {
     private static final String TAG_PREVIEW = "预览";
     private static final String TAG_FOCUS = "对焦";
     private MeteringRectangle[] mMeteringRectangles;
+    private Integer mFocusState;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -444,12 +445,10 @@ public class MainActivity extends AppCompatActivity {
 
                         MeteringRectangle[] meteringRectangles = result.get(CaptureResult.CONTROL_AF_REGIONS);
                         for (int i = 0; i < meteringRectangles.length; i++) {
-                            Log.d(TAG, "onCaptureCompleted: getRect=" + meteringRectangles[i].toString());
+                            Log.d(TAG, "onCaptureCompleted: 对焦区域=" + meteringRectangles[i].toString());
                         }
                         mMeteringRectangles = meteringRectangles;
 
-                        Log.d(TAG, "onCaptureCompleted: 预览中对焦结果=" + result.get(CaptureResult.CONTROL_AF_STATE));
-                        Log.d(TAG, "onCaptureCompleted: 预览中LENS_FOCUS_DISTANCE=" + result.get(CaptureResult.LENS_FOCUS_DISTANCE));//null
                         Pair<Float, Float> floatFloatPair = result.get(CaptureResult.LENS_FOCUS_RANGE);
                         if (floatFloatPair != null) {
                             Log.d(TAG, "onCaptureCompleted: 预览中LENS_FOCUS_RANGE=" + floatFloatPair.toString());
@@ -457,11 +456,45 @@ public class MainActivity extends AppCompatActivity {
 
                     }
                     mRepeatCaptureCount++;
+                    updateState(result, true);
                 } else {
                     Log.d(TAG, "onCaptureCompleted: 非预览");
+                    if (request.getTag().equals(TAG_FOCUS)) {
+                        Log.d(TAG, "onCaptureCompleted: 对焦状态=" + result.get(CaptureResult.CONTROL_AF_STATE));// ACTIVE_SCAN
+                    }
                 }
-                if (request.getTag().equals(TAG_FOCUS)) {
-                    Log.d(TAG, "onCaptureCompleted: 对焦结果=" + result.get(CaptureResult.CONTROL_AF_STATE));
+            }
+
+            private void updateState(CaptureResult result,boolean isPreview) {
+                Integer afState = result.get(CaptureResult.CONTROL_AF_STATE);
+                if (isPreview) {
+                    if (mFocusState == afState) {
+                        return;
+                    }
+                    mFocusState = afState;
+                }
+                switch (afState) {
+                    case CaptureRequest.CONTROL_AF_STATE_INACTIVE:
+                        Log.d(TAG, "updateState: 0 ");
+                        break;
+                    case CaptureRequest.CONTROL_AF_STATE_PASSIVE_SCAN:
+                        Log.d(TAG, "updateState: 1 被动扫描");
+                        break;
+                    case CaptureRequest.CONTROL_AF_STATE_PASSIVE_FOCUSED:
+                        Log.d(TAG, "updateState: 2 被动对焦成功 此时焦距=" + result.get(CaptureResult.LENS_FOCUS_DISTANCE));
+                        break;
+                    case CaptureRequest.CONTROL_AF_STATE_ACTIVE_SCAN:
+                        Log.d(TAG, "updateState: 3 主动扫描");
+                        break;
+                    case CaptureRequest.CONTROL_AF_STATE_FOCUSED_LOCKED:
+                        Log.d(TAG, "updateState: 4 ");
+                        break;
+                    case CaptureRequest.CONTROL_AF_STATE_NOT_FOCUSED_LOCKED:
+                        Log.d(TAG, "updateState: 5 ");
+                        break;
+                    case CaptureRequest.CONTROL_AF_STATE_PASSIVE_UNFOCUSED:
+                        Log.d(TAG, "updateState: 6 ");
+                        break;
                 }
             }
 
@@ -536,7 +569,7 @@ public class MainActivity extends AppCompatActivity {
         // todo
     }
 
-    private void initBuilder(){
+    private void initBuilder() {
         mPreviewRequestBuilder.set(CaptureRequest.CONTROL_AF_MODE, CaptureRequest.CONTROL_AF_MODE_AUTO);
         mPreviewRequestBuilder.set(CaptureRequest.CONTROL_AE_MODE, CaptureRequest.CONTROL_AE_MODE_ON);
         if (mMeteringRectangles != null) {
