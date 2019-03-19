@@ -37,7 +37,13 @@ public class MainActivity extends AppCompatActivity {
                 startActivity(new Intent(MainActivity.this, MatrixActivity.class));
             }
         });
-        findViewById(R.id.button3).performClick();
+//        findViewById(R.id.button3).performClick();
+        findViewById(R.id.button8).setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                startActivity(new Intent(MainActivity.this, MyFragmentActivity.class));
+            }
+        });
     }
 
     void testGet() {
