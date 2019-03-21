@@ -1,12 +1,13 @@
 package com.example.yuan.testforview;
 
-import android.animation.ObjectAnimator;
 import android.content.Intent;
 import android.support.v7.app.AppCompatActivity;
 import android.os.Bundle;
 import android.util.Log;
 import android.view.View;
 import android.widget.Button;
+
+import com.example.yuan.testforview.testViewPager.TestViewPagerActivity;
 
 public class MainActivity extends AppCompatActivity {
     private Button button;
@@ -43,7 +44,13 @@ public class MainActivity extends AppCompatActivity {
                 startActivity(new Intent(MainActivity.this, MyFragmentActivity.class));
             }
         });
-        findViewById(R.id.button8).performClick();
+        findViewById(R.id.button7).setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                startActivity(new Intent(MainActivity.this, TestViewPagerActivity.class));
+            }
+        });
+        findViewById(R.id.button7).performClick();
     }
 
     void testGet() {

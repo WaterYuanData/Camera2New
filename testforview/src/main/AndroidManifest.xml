@@ -17,7 +17,8 @@
             </intent-filter>
         </activity>
         <activity android:name=".MatrixActivity" />
-        <activity android:name=".MyFragmentActivity"></activity>
+        <activity android:name=".MyFragmentActivity" />
+        <activity android:name=".testViewPager.TestViewPagerActivity"></activity>
     </application>
 
 </manifest>

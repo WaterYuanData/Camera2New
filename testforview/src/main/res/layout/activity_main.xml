@@ -49,4 +49,13 @@
         android:text="Fragment"
         android:textAllCaps="false" />
 
+    <Button
+        android:id="@+id/button7"
+        android:textAllCaps="false"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_above="@+id/button3"
+        android:layout_alignParentStart="true"
+        android:text="ViewPager" />
+
 </RelativeLayout>
