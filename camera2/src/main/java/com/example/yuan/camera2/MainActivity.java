@@ -109,6 +109,7 @@ public class MainActivity extends AppCompatActivity {
     private static final int MSG_OPEN_CAMERA = 1;
     private static final int MSG_PICTURE_SAVED = 10;
     private ImageView mThumbnail;
+    private ShutterButton mShutterButton;
     private MyLayout mMyLayout;
     private Rect mRect;
     private float mEventX;
@@ -288,6 +289,12 @@ public class MainActivity extends AppCompatActivity {
                         Log.d(TAG, "onClick: 对焦后拍照");
                         takeCapture();
                         break;
+                    case R.id.start:
+                        mShutterButton.startAnimation();
+                        break;
+                    case R.id.stop:
+                        mShutterButton.stopAnimation();
+                        break;
                 }
             }
         };
@@ -295,7 +302,10 @@ public class MainActivity extends AppCompatActivity {
         mPreviewTextureView = findViewById(R.id.textureView);
         findViewById(R.id.takePicture).setOnClickListener(clickListener);
         findViewById(R.id.button2).setOnClickListener(clickListener);
+        findViewById(R.id.start).setOnClickListener(clickListener);
+        findViewById(R.id.stop).setOnClickListener(clickListener);
         mThumbnail = findViewById(R.id.thumbnail);
+        mShutterButton = findViewById(R.id.shutterButton);
         mPreviewTextureView2 = findViewById(R.id.textureView2);
 
         // region 手势层：处理点击对焦
