@@ -15,12 +15,19 @@ public class ShutterButton extends View {
     private Paint mRedPaint;
     private Paint mWhitePaint;
     boolean mStartAnimation = false;
-    private float mStartAngle = 270; // 起始位置开始画
-    private int mSweepAngle = 0;
-    private long mDelayMillis = 1000L / 24; // 24fps
-    private int mTime = 3 * 1000; // 周期
-    private int mOffSet = 10;
+    private float mStartAngle = 270; // 起始角度
+    private int mSweepAngle; // 当前角度
+    /*
+     * 以3s为周期画一圈
+     * 以每次画30°为例，画一圈需要画12次
+     * 3s画12次，则间隔时长 3 * 1000 / 12 画一次
+     * */
+    private int mCycleTime = 3 * 1000; // 周期
+    private int mOffSetAngle = 15; // 每次偏移的角度
+    private int mOffSetTimes = 360 / mOffSetAngle; // 一圈的偏移次数
+    private long mOffSetDelayMillis = mCycleTime / mOffSetTimes; // 间隔多长时间画一次
     private long mStartTime;
+    private long mCurrentTimeMillis;
     private Runnable mRunnable = new Runnable() {
         @Override
         public void run() {
@@ -56,8 +63,10 @@ public class ShutterButton extends View {
 
     public void startAnimation() {
         mStartTime = System.currentTimeMillis();
+        mCurrentTimeMillis = 0;
         mSweepAngle = 0;
         mStartAnimation = true;
+        Log.d(TAG, "startAnimation: mOffSetDelayMillis=" + mOffSetDelayMillis);
         postInvalidate();
     }
 
@@ -73,13 +82,17 @@ public class ShutterButton extends View {
         super.onDraw(canvas);
         canvas.drawCircle(getWidth() / 2, getHeight() / 2, getWidth() / 2, mRedPaint);
         if (mStartAnimation) {
-            long currentTimeMillis = System.currentTimeMillis();
-            canvas.drawArc(0, 0, getWidth(), getHeight(), mStartAngle, mSweepAngle, true, mWhitePaint);
-            mSweepAngle = (mSweepAngle + mOffSet) % 360;
-            if (mSweepAngle == 0) {
-                stopAnimation();
+            if (mCurrentTimeMillis != 0) {
+                Log.d(TAG, "onDraw: mSweepAngle=" + mSweepAngle + " mCurrentTimeMillis=" + (System.currentTimeMillis() - mCurrentTimeMillis));
             }
-            postDelayed(mRunnable, 1000 / 24);// 24fps的速率刷新，避免频繁调用UI线程
+            mCurrentTimeMillis = System.currentTimeMillis();
+            mSweepAngle = mSweepAngle + mOffSetAngle;
+            canvas.drawArc(0, 0, getWidth(), getHeight(), mStartAngle, mSweepAngle, true, mWhitePaint);
+            if (mSweepAngle >= 360) {
+                stopAnimation();
+                return;
+            }
+            postDelayed(mRunnable, mOffSetDelayMillis);
         }
     }
 }
