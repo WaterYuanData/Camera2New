@@ -22,12 +22,13 @@ public class ShutterButton extends View {
      * 以每次画30°为例，画一圈需要画12次
      * 3s画12次，则间隔时长 3 * 1000 / 12 画一次
      * */
-    private int mCycleTime = 3 * 1000; // 周期
+    private int mCycleTime = 5 * 1000; // 周期
     private int mOffSetAngle = 15; // 每次偏移的角度
     private int mOffSetTimes = 360 / mOffSetAngle; // 一圈的偏移次数
     private long mOffSetDelayMillis = mCycleTime / mOffSetTimes; // 间隔多长时间画一次
     private long mStartTime;
     private long mCurrentTimeMillis;
+    private long mLastTimeMillis;
     private Runnable mRunnable = new Runnable() {
         @Override
         public void run() {
@@ -82,16 +83,16 @@ public class ShutterButton extends View {
         super.onDraw(canvas);
         canvas.drawCircle(getWidth() / 2, getHeight() / 2, getWidth() / 2, mRedPaint);
         if (mStartAnimation) {
-            if (mCurrentTimeMillis != 0) {
-                Log.d(TAG, "onDraw: mSweepAngle=" + mSweepAngle + " mCurrentTimeMillis=" + (System.currentTimeMillis() - mCurrentTimeMillis));
-            }
+            mLastTimeMillis = mCurrentTimeMillis;
             mCurrentTimeMillis = System.currentTimeMillis();
-            mSweepAngle = mSweepAngle + mOffSetAngle;
-            canvas.drawArc(0, 0, getWidth(), getHeight(), mStartAngle, mSweepAngle, true, mWhitePaint);
+            mSweepAngle = (int) (360 * (mCurrentTimeMillis - mStartTime) / mCycleTime);
             if (mSweepAngle >= 360) {
                 stopAnimation();
                 return;
             }
+            Log.d(TAG, "onDraw: mSweepAngle=" + mSweepAngle + " mCurrentTimeMillis=" + (mCurrentTimeMillis - mStartTime));
+            Log.d(TAG, "onDraw: " + (mCurrentTimeMillis - mLastTimeMillis));
+            canvas.drawArc(0, 0, getWidth(), getHeight(), mStartAngle, mSweepAngle, true, mWhitePaint);
             postDelayed(mRunnable, mOffSetDelayMillis);
         }
     }
