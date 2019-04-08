@@ -110,6 +110,7 @@ public class MainActivity extends AppCompatActivity {
     private static final int MSG_PICTURE_SAVED = 10;
     private ImageView mThumbnail;
     private ShutterButton mShutterButton;
+    private LoadingRender mLoadingRender;
     private MyLayout mMyLayout;
     private Rect mRect;
     private float mEventX;
@@ -291,9 +292,11 @@ public class MainActivity extends AppCompatActivity {
                         break;
                     case R.id.start:
                         mShutterButton.startAnimation();
+                        mLoadingRender.start();
                         break;
                     case R.id.stop:
                         mShutterButton.stopAnimation();
+                        mLoadingRender.stop();
                         break;
                 }
             }
@@ -306,6 +309,7 @@ public class MainActivity extends AppCompatActivity {
         findViewById(R.id.stop).setOnClickListener(clickListener);
         mThumbnail = findViewById(R.id.thumbnail);
         mShutterButton = findViewById(R.id.shutterButton);
+        mLoadingRender = findViewById(R.id.loadingRenderer);
         mPreviewTextureView2 = findViewById(R.id.textureView2);
 
         // region 手势层：处理点击对焦

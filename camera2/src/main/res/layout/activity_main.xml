@@ -1,5 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
-<android.support.constraint.ConstraintLayout xmlns:android="http://schemas.android.com/apk/res/android"
+<android.support.constraint.ConstraintLayout
+    xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
     xmlns:tools="http://schemas.android.com/tools"
     android:layout_width="match_parent"
@@ -9,7 +10,7 @@
     <TextureView
         android:id="@+id/textureView2"
         android:layout_width="match_parent"
-        android:layout_height="match_parent" />
+        android:layout_height="match_parent"/>
 
     <TextView
         android:layout_width="wrap_content"
@@ -18,7 +19,7 @@
         app:layout_constraintBottom_toBottomOf="parent"
         app:layout_constraintLeft_toLeftOf="parent"
         app:layout_constraintRight_toRightOf="parent"
-        app:layout_constraintTop_toTopOf="parent" />
+        app:layout_constraintTop_toTopOf="parent"/>
 
     <TextureView
         android:id="@+id/textureView"
@@ -27,7 +28,7 @@
         android:layout_marginEnd="8dp"
         android:layout_marginTop="8dp"
         app:layout_constraintEnd_toEndOf="parent"
-        app:layout_constraintTop_toTopOf="parent" />
+        app:layout_constraintTop_toTopOf="parent"/>
 
     <Button
         android:id="@+id/takePicture"
@@ -37,7 +38,7 @@
         android:layout_marginStart="8dp"
         android:text="拍照"
         app:layout_constraintBottom_toBottomOf="parent"
-        app:layout_constraintStart_toStartOf="parent" />
+        app:layout_constraintStart_toStartOf="parent"/>
 
     <Button
         android:id="@+id/button2"
@@ -47,14 +48,14 @@
         android:layout_marginStart="8dp"
         android:text="拍照2"
         app:layout_constraintBottom_toBottomOf="parent"
-        app:layout_constraintStart_toEndOf="@id/takePicture" />
+        app:layout_constraintStart_toEndOf="@id/takePicture"/>
 
     <ImageView
         android:id="@+id/thumbnail"
         android:layout_width="80dp"
         android:layout_height="80dp"
         android:background="#55555555"
-        app:srcCompat="@android:color/transparent" />
+        app:srcCompat="@android:color/transparent"/>
 
     <com.example.yuan.camera2.MyLayout
         android:id="@+id/myLayout"
@@ -70,7 +71,7 @@
         android:layout_height="wrap_content"
         android:text="开始"
         app:layout_constraintBottom_toTopOf="@id/stop"
-        app:layout_constraintEnd_toEndOf="parent" />
+        app:layout_constraintEnd_toEndOf="parent"/>
 
     <Button
         android:id="@+id/stop"
@@ -78,7 +79,7 @@
         android:layout_height="wrap_content"
         android:text="结束"
         app:layout_constraintBottom_toBottomOf="parent"
-        app:layout_constraintEnd_toEndOf="parent" />
+        app:layout_constraintEnd_toEndOf="parent"/>
 
     <com.example.yuan.camera2.ShutterButton
         android:id="@+id/shutterButton"
@@ -90,5 +91,16 @@
         android:background="#3f05ffff"
         app:layout_constraintBottom_toBottomOf="parent"
         app:layout_constraintEnd_toEndOf="parent"
-        app:layout_constraintStart_toStartOf="parent" />
+        app:layout_constraintStart_toStartOf="parent"/>
+
+    <com.example.yuan.camera2.LoadingRender
+        android:id="@+id/loadingRenderer"
+        android:layout_width="100dp"
+        android:layout_height="100dp"
+        android:layout_marginBottom="250dp"
+        android:layout_marginEnd="8dp"
+        android:layout_marginStart="8dp"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent"/>
 </android.support.constraint.ConstraintLayout>
