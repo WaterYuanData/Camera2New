@@ -9,7 +9,6 @@ import android.graphics.Color;
 import android.graphics.Paint;
 import android.graphics.RectF;
 import android.support.annotation.Nullable;
-import android.support.annotation.Size;
 import android.support.v4.view.animation.FastOutSlowInInterpolator;
 import android.util.AttributeSet;
 import android.util.Log;
@@ -24,11 +23,6 @@ public class LoadingRender extends View {
     private static final String TAG = "LoadingRender";
     private ValueAnimator mRenderAnimator;
     private static final long ANIMATION_DURATION = 1333;
-    private static final float DEFAULT_SIZE = 56.0f;
-    protected long mDuration;
-
-    protected float mWidth;
-    protected float mHeight;
 
     private final Interpolator LINEAR_INTERPOLATOR = new LinearInterpolator();
     private final Interpolator MATERIAL_INTERPOLATOR = new FastOutSlowInInterpolator();
@@ -41,24 +35,18 @@ public class LoadingRender extends View {
     private final float[] LEVEL_SWEEP_ANGLE_OFFSETS = new float[]{1.0f, 7.0f / 8.0f, 5.0f / 8.0f};
     private static final float START_TRIM_DURATION_OFFSET = 0.5f;
     private static final float END_TRIM_DURATION_OFFSET = 1.0f;
-    private static final float DEFAULT_CENTER_RADIUS = 12.5f;
-    private static final float DEFAULT_STROKE_WIDTH = 2.5f;
     private final int[] DEFAULT_LEVEL_COLORS = new int[]{Color.parseColor("#55ffffff"),
             Color.parseColor("#b1ffffff"), Color.parseColor("#ffffffff")};
-    private final Paint mPaint = new Paint();
-    private final RectF mTempBounds = new RectF();
-    @Size(3)
-    private int[] mLevelColors;
-    @Size(3)
-    private float[] mLevelSwipeDegrees;
-    private float mStrokeInset;
+    private Paint mPaint = new Paint();
+    private RectF mTempBounds;
+    private float[] mLevelSwipeDegrees = new float[3];
     private float mRotationCount;
     private float mGroupRotation;
     private float mEndDegrees;
     private float mStartDegrees;
     private float mOriginEndDegrees;
     private float mOriginStartDegrees;
-    private float mStrokeWidth;
+    private float mStrokeWidth = 30;
     private float mCenterRadius;
 
     private final ValueAnimator.AnimatorUpdateListener mAnimatorUpdateListener
@@ -66,7 +54,7 @@ public class LoadingRender extends View {
         @Override
         public void onAnimationUpdate(ValueAnimator animation) {
             computeRender((float) animation.getAnimatedValue());
-            Log.d(TAG, "onAnimationUpdate: "+animation.getAnimatedValue());
+            Log.d(TAG, "onAnimationUpdate: " + animation.getAnimatedValue());
             postInvalidate();
         }
     };
@@ -95,71 +83,54 @@ public class LoadingRender extends View {
 
     public LoadingRender(Context context, @Nullable AttributeSet attrs) {
         super(context, attrs);
-        initParams(context);
         setupAnimators();
-
-        init(context);
         setupPaint();
-        addRenderListener(mAnimatorListener);
-    }
-
-    private void initParams(Context context) {
-        mWidth = DensityUtil.dip2px(context, DEFAULT_SIZE);
-        mHeight = DensityUtil.dip2px(context, DEFAULT_SIZE);
-
-        mDuration = ANIMATION_DURATION;
     }
 
     private void setupAnimators() {
         mRenderAnimator = ValueAnimator.ofFloat(0.0f, 1.0f);// 与ofFloat(0, 360)的区别???
         mRenderAnimator.setRepeatCount(Animation.INFINITE);// Animation与ValueAnimator的区别
         mRenderAnimator.setRepeatMode(ValueAnimator.RESTART);
-        mRenderAnimator.setDuration(mDuration);
+        mRenderAnimator.setDuration(ANIMATION_DURATION);
         //fuck you! the default interpolator is AccelerateDecelerateInterpolator
         mRenderAnimator.setInterpolator(new LinearInterpolator());
         mRenderAnimator.addUpdateListener(mAnimatorUpdateListener);
-    }
-
-    private void init(Context context) {
-        mStrokeWidth = DensityUtil.dip2px(context, DEFAULT_STROKE_WIDTH);
-        mCenterRadius = DensityUtil.dip2px(context, DEFAULT_CENTER_RADIUS);
-
-        mLevelSwipeDegrees = new float[3];
-        mLevelColors = DEFAULT_LEVEL_COLORS;
+        mRenderAnimator.addListener(mAnimatorListener);
     }
 
     private void setupPaint() {
-
         mPaint.setAntiAlias(true);
         mPaint.setStrokeWidth(mStrokeWidth);
         mPaint.setStyle(Paint.Style.STROKE);
         mPaint.setStrokeCap(Paint.Cap.ROUND);
-
-        initStrokeInset((int) mWidth, (int) mHeight);
     }
 
-    private void initStrokeInset(float width, float height) {
-        float minSize = Math.min(width, height);
-        float strokeInset = minSize / 2.0f - mCenterRadius;
-        float minStrokeInset = (float) Math.ceil(mStrokeWidth / 2.0f);
-        mStrokeInset = strokeInset < minStrokeInset ? minStrokeInset : strokeInset;
-    }
-
-    protected void addRenderListener(Animator.AnimatorListener animatorListener) {
-        mRenderAnimator.addListener(animatorListener);
-    }
+//    private void initStrokeInset(float width, float height) {
+//        float minSize = Math.min(width, height);
+//        float strokeInset = minSize / 2.0f - mCenterRadius;
+//        float minStrokeInset = (float) Math.ceil(mStrokeWidth / 2.0f);
+//        mStrokeInset = strokeInset < minStrokeInset ? minStrokeInset : strokeInset;
+//    }
 
     protected void onDraw(Canvas canvas) {
         // int saveCount = canvas.save();
 
-        mTempBounds.set(getLeft(),getTop(),getRight(),getBottom());
-        mTempBounds.inset(mStrokeInset, mStrokeInset);
+        if (mCenterRadius <= 0) {
+            mCenterRadius = Math.min(getMeasuredWidth(), getMeasuredHeight()) / 2;
+        }
+
+        if (mTempBounds == null) {
+            mTempBounds = new RectF();
+            mTempBounds.set(0, 0, getMeasuredWidth(), getMeasuredHeight());
+            mTempBounds.inset(mStrokeWidth / 2, mStrokeWidth / 2); // 在边沿画线让过笔宽的一半
+        }
+
         canvas.rotate(mGroupRotation, mTempBounds.centerX(), mTempBounds.centerY());
 
         for (int i = 0; i < 3; i++) {
             if (mLevelSwipeDegrees[i] != 0) {
-                mPaint.setColor(mLevelColors[i]);
-                Log.d(TAG, "onDraw: "+mTempBounds.toShortString()+mGroupRotation+" "+mLevelSwipeDegrees[i]+" "+mEndDegrees+" "+mLevelColors[i]);
+                mPaint.setColor(DEFAULT_LEVEL_COLORS[i]);
+                Log.d(TAG, "onDraw: " + mTempBounds.toShortString() + mGroupRotation + " " + mLevelSwipeDegrees[i] + " " + mEndDegrees + " " + DEFAULT_LEVEL_COLORS[i]);
                 canvas.drawArc(mTempBounds, mEndDegrees, mLevelSwipeDegrees[i], false, mPaint);
             }
         }
@@ -211,7 +182,6 @@ public class LoadingRender extends View {
     }
 
     void start() {
-        // mRenderAnimator.addUpdateListener(mAnimatorUpdateListener);
         mRenderAnimator.start();
     }
 
