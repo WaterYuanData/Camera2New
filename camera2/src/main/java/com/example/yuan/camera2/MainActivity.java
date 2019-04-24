@@ -642,7 +642,7 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private void unLockFocus() {
-        mMyLayout.setVisible(false);
+//        mMyLayout.setVisible(false);
         Log.d(TAG, "unLockFocus: ");
         // CaptureRequest.Builder unLockFocusRequestBuilder = getPreviewRequestBuilder();
         // unLockFocusRequestBuilder.setTag("解除锁焦");
