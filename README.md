@@ -1,5 +1,4 @@
-# new
-新建
+https://github.com/WaterYuanData/Camera2New
 
 test1使用依赖库aarlib的源码，便于调试
 库的buildTypes要跟随应用的buildTypes

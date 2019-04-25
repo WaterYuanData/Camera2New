@@ -4,6 +4,7 @@ import android.Manifest;
 import android.app.Activity;
 import android.content.Context;
 import android.content.pm.PackageManager;
+import android.content.res.Configuration;
 import android.graphics.Matrix;
 import android.graphics.RectF;
 import android.graphics.SurfaceTexture;
@@ -46,7 +47,7 @@ import java.util.concurrent.TimeUnit;
 
 public class CameraFragment extends Fragment implements View.OnClickListener {
     private static final String TAG = "CameraFragment";
-    private TextureView mTextureView;
+    private AutoFitTextureView mTextureView;
     private HandlerThread mBackgroundThread;
     private Handler mBackgroundHandler;
     private static final String[] VIDEO_PERMISSIONS = {
@@ -69,7 +70,8 @@ public class CameraFragment extends Fragment implements View.OnClickListener {
         @Override
         public void onSurfaceTextureAvailable(SurfaceTexture surfaceTexture,
                                               int width, int height) {
-            Log.i(TAG, "onSurfaceTextureAvailable: ");
+            Log.i(TAG, "onSurfaceTextureAvailable: 与横竖屏有关 最初=" + width + "x" + height);
+            getGreatestCommonDivisor(width, height);
             openCamera(width, height);
         }
 
@@ -154,6 +156,14 @@ public class CameraFragment extends Fragment implements View.OnClickListener {
 
     private String mNextVideoAbsolutePath;
     private Button mButtonVideo;
+    private Button mButtonResolution;
+
+    enum Resolution {
+        resolution_4_3,
+        resolution_16_9,
+    }
+
+    Resolution resolution = Resolution.resolution_4_3;
 
     @Nullable
     @Override
@@ -170,6 +180,9 @@ public class CameraFragment extends Fragment implements View.OnClickListener {
         mTextureView = view.findViewById(R.id.camera_textureView);
         mButtonVideo = view.findViewById(R.id.shutter_button);
         mButtonVideo.setOnClickListener(this);
+        mButtonResolution = view.findViewById(R.id.resolution_button);
+        mButtonResolution.setText("分辨率：" + (resolution == Resolution.resolution_4_3 ? "4:3" : "16:9"));
+        mButtonResolution.setOnClickListener(this);
     }
 
     @Override
@@ -195,7 +208,49 @@ public class CameraFragment extends Fragment implements View.OnClickListener {
                     startRecordingVideo();
                 }
                 break;
+            case R.id.resolution_button:
+                resolution = resolution == Resolution.resolution_4_3 ? Resolution.resolution_16_9 : Resolution.resolution_4_3;
+                mButtonResolution.setText(resolution == Resolution.resolution_4_3 ? "4:3" : "16:9");
+                Log.e(TAG, "onClick: 分辨率改为=" + resolution);
+                changePreviewSize();
+                break;
         }
+    }
+
+    //辗转相除求最大公约数
+    private static int getGreatestCommonDivisor(int x, int y) {
+        int mun1 = x > y ? x : y;
+        int mun2 = x < y ? x : y;
+        int gcd = mun1 % mun2;
+        while (gcd != 0) {
+            mun1 = mun2;
+            mun2 = gcd;
+            gcd = mun1 % mun2;
+        }
+        gcd = mun2;
+        Log.i(TAG, "getGreatestCommonDivisor: 分辨率=" + x + "x" + y + " 为=" + Math.max(x, y) / gcd + ":" + Math.min(x, y) / gcd);
+        return gcd;
+    }
+
+    private void changePreviewSize() {
+//        ViewGroup.LayoutParams layoutParams = mTextureView.getLayoutParams();
+//        Log.i(TAG, "changePreviewSize: " + layoutParams.height); // -1
+//        layoutParams.height = resolution == Resolution.resolution_4_3 ? layoutParams.width * 4 / 3 : layoutParams.width * 16 / 9;
+//        Log.i(TAG, "changePreviewSize: " + layoutParams.height);
+//        mTextureView.setLayoutParams(layoutParams);
+//        mTextureView.requestLayout();
+        // 一直为-1，所以改为AutoFitTextureView试试
+        getGreatestCommonDivisor(mTextureView.getWidth(), mTextureView.getHeight());
+        int orientation = getResources().getConfiguration().orientation;
+        if (orientation == Configuration.ORIENTATION_LANDSCAPE) {
+            mTextureView.setAspectRatio(resolution == Resolution.resolution_16_9 ?
+                    mTextureView.getHeight() * 16 / 9 : mTextureView.getHeight() * 4 / 3, mTextureView.getHeight());
+        } else {
+            // 竖屏 固定宽度变换高度
+            mTextureView.setAspectRatio(mTextureView.getWidth(),
+                    resolution == Resolution.resolution_16_9 ? mTextureView.getWidth() * 16 / 9 : mTextureView.getWidth() * 4 / 3);
+        }
+        getGreatestCommonDivisor(mTextureView.getWidth(), mTextureView.getHeight());
     }
 
     private void stopRecordingVideo() {
@@ -384,6 +439,7 @@ public class CameraFragment extends Fragment implements View.OnClickListener {
                     option.getWidth() >= width && option.getHeight() >= height) {
                 bigEnough.add(option);
             }
+            getGreatestCommonDivisor(option.getHeight(), option.getWidth());
         }
 
         // Pick the smallest of those, assuming we found any
@@ -473,13 +529,14 @@ public class CameraFragment extends Fragment implements View.OnClickListener {
             mVideoSize = chooseVideoSize(map.getOutputSizes(MediaRecorder.class));
             mPreviewSize = chooseOptimalSize(map.getOutputSizes(SurfaceTexture.class),
                     width, height, mVideoSize);
+            Log.i(TAG, "openCamera: TextureView的宽高=" + width + "x" + height + " mPreviewSize=" + mPreviewSize.toString());
 
             int orientation = getResources().getConfiguration().orientation;
-//            if (orientation == Configuration.ORIENTATION_LANDSCAPE) {
-//                mTextureView.setAspectRatio(mPreviewSize.getWidth(), mPreviewSize.getHeight());
-//            } else {
-//                mTextureView.setAspectRatio(mPreviewSize.getHeight(), mPreviewSize.getWidth());
-//            }
+            if (orientation == Configuration.ORIENTATION_LANDSCAPE) {
+                mTextureView.setAspectRatio(mPreviewSize.getWidth(), mPreviewSize.getHeight());
+            } else {
+                mTextureView.setAspectRatio(mPreviewSize.getHeight(), mPreviewSize.getWidth());
+            }
             configureTransform(width, height);
             manager.openCamera(cameraId, mStateCallback, null);
         } catch (CameraAccessException e) {

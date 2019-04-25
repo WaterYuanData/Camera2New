@@ -18,12 +18,14 @@ package com.example.camera2video;
 
 import android.content.Context;
 import android.util.AttributeSet;
+import android.util.Log;
 import android.view.TextureView;
 
 /**
  * A {@link TextureView} that can be adjusted to a specified aspect ratio.
  */
 public class AutoFitTextureView extends TextureView {
+    private static final String TAG = "AutoFitTextureView";
 
     private int mRatioWidth = 0;
     private int mRatioHeight = 0;
@@ -54,6 +56,7 @@ public class AutoFitTextureView extends TextureView {
         }
         mRatioWidth = width;
         mRatioHeight = height;
+        Log.i(TAG, "setAspectRatio: " + mRatioWidth + "x" + mRatioHeight);
         requestLayout();
     }
 
@@ -62,12 +65,17 @@ public class AutoFitTextureView extends TextureView {
         super.onMeasure(widthMeasureSpec, heightMeasureSpec);
         int width = MeasureSpec.getSize(widthMeasureSpec);
         int height = MeasureSpec.getSize(heightMeasureSpec);
+        Log.i(TAG, "onMeasure: " + width + "x" + height);
+        Log.i(TAG, "onMeasure: " + mRatioWidth + "x" + mRatioHeight);
         if (0 == mRatioWidth || 0 == mRatioHeight) {
             setMeasuredDimension(width, height);
         } else {
             if (width < height * mRatioWidth / mRatioHeight) {
+                // 竖屏 实际16:9 大于 4:3
+                Log.i(TAG, "onMeasure: ---" + (width * mRatioHeight / mRatioWidth));
                 setMeasuredDimension(width, width * mRatioHeight / mRatioWidth);
             } else {
+                // 横屏
                 setMeasuredDimension(height * mRatioWidth / mRatioHeight, height);
             }
         }
